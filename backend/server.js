@@ -25,7 +25,7 @@ app.get('/health', (req, res) => {
     database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
   });
 });
-
+app.use(cors());
 // Routes come AFTER
 app.use('/auth', require('./auth/auth.routes'));
 app.use('/users', require('./users/users.routes'));
