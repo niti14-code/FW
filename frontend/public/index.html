@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FreeWheels - Campus Ride Sharing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0a0c10;
+      --surface: #111318;
+      --surface2: #1a1d26;
+      --border: #252836;
+      --accent: #f5a623;
+      --accent2: #e8552e;
+      --green: #2dd4a0;
+      --text: #f0f0ef;
+      --muted: #7a7e8e;
+      --blue: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    
+    /* Navigation */
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 40px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(10,12,16,0.92);
+      backdrop-filter: blur(16px);
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo {
+      font-family: 'Syne', sans-serif;
+      font-size: 22px; font-weight: 800;
+      cursor: pointer;
+    }
+    .logo span { color: var(--accent); }
+    .nav-tabs { display: flex; gap: 4px; }
+    .nav-tab {
+      padding: 8px 20px; border-radius: 100px;
+      border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px; font-weight: 500;
+      background: transparent; color: var(--muted);
+      transition: all 0.2s;
+    }
+    .nav-tab.active { background: var(--accent); color: #000; }
+    .nav-tab:hover:not(.active) { color: var(--text); }
+    
+    /* Pages */
+    .page { display: none; min-height: calc(100vh - 65px); }
+    .page.active { display: block; animation: fadeIn 0.35s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    
+    /* Cards */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px;
+      margin-bottom: 24px;
+    }
+    
+    /* Forms */
+    .field { margin-bottom: 24px; }
+    .field label {
+      display: block; font-size: 12px; font-weight: 600;
+      color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+      margin-bottom: 10px;
+    }
+    .field input, .field select, .field textarea {
+      width: 100%; padding: 16px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px; color: var(--text);
+      font-family: 'DM Sans', sans-serif; font-size: 15px;
+      transition: all 0.2s;
+    }
+    .field input:focus, .field select:focus {
+      outline: none; border-color: var(--accent);
+    }
+    .field input::placeholder { color: var(--muted); }
+    
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+    
+    /* Buttons */
+    .btn-primary {
+      width: 100%; padding: 16px;
+      background: var(--accent);
+      border: none; border-radius: 12px;
+      color: #000; font-family: 'Syne', sans-serif;
+      font-size: 15px; font-weight: 700;
+      cursor: pointer; transition: all 0.2s;
+    }
+    .btn-primary:hover { 
+      background: #f9bc52; 
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(245,166,35,0.3);
+    }
+    .btn-secondary {
+      padding: 12px 24px; border-radius: 10px;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--text); font-family: 'DM Sans', sans-serif;
+      font-size: 14px; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-icon {
+      width: 40px; height: 40px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-icon:disabled { opacity: 0.3; cursor: not-allowed; }
+    
+    /* Badges */
+    .badge {
+      padding: 6px 14px; border-radius: 100px;
+      font-size: 12px; font-weight: 600;
+      display: inline-block;
+    }
+    .badge-provider { background: rgba(59,130,246,0.15); color: var(--blue); }
+    .badge-seeker { background: rgba(45,212,160,0.15); color: var(--green); }
+    .badge-success { background: rgba(45,212,160,0.15); color: var(--green); }
+    .badge-warning { background: rgba(245,166,35,0.15); color: var(--accent); }
+    
+    /* Location Inputs */
+    .location-field {
+      position: relative;
+      display: flex; align-items: center;
+    }
+    .location-dot {
+      position: absolute; left: 16px;
+      width: 12px; height: 12px; border-radius: 50%;
+    }
+    .location-dot.pickup { background: var(--green); }
+    .location-dot.drop { background: var(--accent2); }
+    .location-field input {
+      padding-left: 40px;
+    }
+    
+    /* Seat Selector */
+    .seat-control {
+      display: flex; align-items: center; gap: 16px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 20px;
+      width: fit-content;
+    }
+    .seat-number {
+      font-family: 'Syne', sans-serif;
+      font-size: 28px; font-weight: 800;
+      color: var(--accent);
+      min-width: 40px;
+      text-align: center;
+    }
+    
+    /* Cost Calculator */
+    .cost-card {
+      background: linear-gradient(135deg, rgba(245,166,35,0.1), rgba(232,85,46,0.05));
+      border: 1px solid rgba(245,166,35,0.3);
+      border-radius: 16px;
+      padding: 24px;
+      margin-top: 24px;
+    }
+    .cost-row {
+      display: flex; justify-content: space-between;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    .cost-row.total {
+      border-top: 1px solid var(--border);
+      padding-top: 16px;
+      margin-top: 16px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .cost-value { color: var(--accent); font-weight: 600; }
+    
+    /* Document Upload */
+    .doc-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .doc-card {
+      border: 2px dashed var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .doc-card:hover { border-color: var(--accent); }
+    .doc-card.uploaded {
+      border-style: solid;
+      border-color: var(--green);
+      background: rgba(45,212,160,0.05);
+    }
+    .doc-icon { font-size: 32px; margin-bottom: 12px; }
+    .doc-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .doc-status { font-size: 12px; color: var(--muted); }
+    .doc-check {
+      position: absolute; top: 12px; right: 12px;
+      width: 24px; height: 24px;
+      background: var(--green);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+    }
+    
+    /* Ride Cards */
+    .ride-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 16px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .ride-route {
+      display: flex; align-items: center; gap: 12px;
+      margin: 16px 0;
+    }
+    .route-line {
+      flex: 1; height: 2px;
+      background: repeating-linear-gradient(90deg, var(--border) 0, var(--border) 4px, transparent 4px, transparent 8px);
+      max-width: 100px;
+    }
+    
+    /* Search Results */
+    .search-filters {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+    
+    /* Profile Header */
+    .profile-header {
+      display: flex; align-items: center; gap: 24px;
+      margin-bottom: 32px;
+    }
+    .avatar {
+      width: 100px; height: 100px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-size: 36px; font-weight: 800;
+      color: #000;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+      .two-col, .three-col, .doc-grid { grid-template-columns: 1fr; }
+      nav { padding: 16px 20px; }
+      .card { padding: 20px; }
+    }
+    
+    .error { color: var(--accent2); margin-bottom: 16px; font-size: 14px; }
+    .success { color: var(--green); margin-bottom: 16px; font-size: 14px; }
+    .loading { text-align: center; padding: 40px; color: var(--accent); }
+    
+    /* Hide file input */
+    input[type="file"] { display: none; }
+    
+    /* Tabs */
+    .tabs { display: flex; gap: 8px; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+    .tab {
+      padding: 10px 20px;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 14px;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -17px;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+    
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .empty-state-icon { font-size: 48px; margin-bottom: 16px; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="logo" onclick="showPage('dashboard')">Free<span>Wheels</span></div>
+  <div class="nav-tabs" id="navTabs" style="display: none;">
+    <button class="nav-tab" onclick="showPage('dashboard')" id="navDashboard">Dashboard</button>
+    <button class="nav-tab" onclick="showPage('rides')" id="navRides">My Rides</button>
+    <button class="nav-tab" onclick="showPage('bookings')" id="navBookings">Bookings</button>
+    <button class="nav-tab" onclick="showPage('profile')" id="navProfile">Profile</button>
+    <button class="nav-tab" onclick="logout()">Logout</button>
+  </div>
+</nav>
+
+<!-- ==================== AUTH PAGE ==================== -->
+<div id="auth" class="page active">
+  <div style="display: grid; grid-template-columns: 1fr 1fr; min-height: calc(100vh - 65px);">
+    <!-- Left Side -->
+    <div style="padding: 80px; display: flex; flex-direction: column; justify-content: center; position: relative; overflow: hidden;">
+      <div style="position: absolute; inset: 0; background: radial-gradient(ellipse at 30% 50%, rgba(245,166,35,0.12) 0%, transparent 60%); pointer-events: none;"></div>
+      <div style="font-size: 12px; font-weight: 600; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; margin-bottom: 24px; display: flex; align-items: center; gap: 12px;">
+        <span style="width: 30px; height: 2px; background: var(--accent);"></span>
+        Campus Ride Network
+      </div>
+      <h1 style="font-family: 'Syne', sans-serif; font-size: 56px; font-weight: 800; line-height: 1.1; margin-bottom: 24px;">
+        Share the commute,<br>
+        <span style="color: var(--accent);">split the cost.</span>
+      </h1>
+      <p style="color: var(--muted); font-size: 18px; line-height: 1.6; max-width: 400px;">
+        The ride-sharing platform built exclusively for college students. Verified identities, shared campuses, real savings.
+      </p>
+    </div>
+    
+    <!-- Right Side -->
+    <div style="background: var(--surface); border-left: 1px solid var(--border); padding: 80px; display: flex; flex-direction: column; justify-content: center;">
+      <div class="tabs">
+        <button class="tab active" onclick="switchAuthTab('login')" id="loginTab">Sign In</button>
+        <button class="tab" onclick="switchAuthTab('register')" id="registerTab">Create Account</button>
+      </div>
+      
+      <!-- Login Form -->
+      <form id="loginForm" style="display: block;">
+        <div id="loginError" class="error"></div>
+        <div class="field">
+          <label>College Email</label>
+          <input type="email" id="loginEmail" placeholder="you@college.edu" required>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="loginPassword" placeholder="Enter password" required>
+        </div>
+        <button type="submit" class="btn-primary">Sign In →</button>
+      </form>
+      
+      <!-- Register Form -->
+      <form id="registerForm" style="display: none;">
+        <div id="registerError" class="error"></div>
+        <div class="two-col">
+          <div class="field">
+            <label>Full Name</label>
+            <input type="text" id="regName" placeholder="Your name" required>
+          </div>
+          <div class="field">
+            <label>College Email</label>
+            <input type="email" id="regEmail" placeholder="you@college.edu" required>
+          </div>
+        </div>
+        <div class="two-col">
+          <div class="field">
+            <label>Phone Number</label>
+            <input type="tel" id="regPhone" placeholder="+91 9876543210" required>
+          </div>
+          <div class="field">
+            <label>College / University</label>
+            <input type="text" id="regCollege" placeholder="IIT Bombay, BITS Pilani..." required>
+          </div>
+        </div>
+        <div class="field">
+          <label>I want to</label>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <div class="card" style="cursor: pointer; padding: 20px; text-align: center;" onclick="selectRole('provider')" id="roleProvider">
+              <div style="font-size: 32px; margin-bottom: 8px;">🚗</div>
+              <div style="font-weight: 600; margin-bottom: 4px;">Offer Rides</div>
+              <div style="font-size: 12px; color: var(--muted);">I have a vehicle</div>
+            </div>
+            <div class="card" style="cursor: pointer; padding: 20px; text-align: center;" onclick="selectRole('seeker')" id="roleSeeker">
+              <div style="font-size: 32px; margin-bottom: 8px;">🎒</div>
+              <div style="font-weight: 600; margin-bottom: 4px;">Find Rides</div>
+              <div style="font-size: 12px; color: var(--muted);">I need a ride</div>
+            </div>
+          </div>
+          <input type="hidden" id="regRole" value="seeker">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="regPassword" placeholder="Create strong password" required>
+        </div>
+        <button type="submit" class="btn-primary">Create Account →</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== DASHBOARD (ROLE-BASED) ==================== -->
+<div id="dashboard" class="page">
+  <div style="max-width: 1200px; margin: 0 auto; padding: 40px;">
+    
+    <!-- Provider Dashboard -->
+    <div id="providerDashboard" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+        <div>
+          <div style="font-size: 12px; font-weight: 600; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; margin-bottom: 8px;">
+            Provider Dashboard
+          </div>
+          <h1 style="font-family: 'Syne', sans-serif; font-size: 38px; font-weight: 800;">Offer a Ride</h1>
+        </div>
+      </div>
+      
+      <div class="card">
+        <form id="createRideForm">
+          <div class="two-col">
+            <div class="field">
+              <label>From (Pickup Location)</label>
+              <div class="location-field">
+                <div class="location-dot pickup"></div>
+                <input type="text" id="rideFrom" placeholder="Enter pickup location" required>
+              </div>
+            </div>
+            <div class="field">
+              <label>To (Drop Location)</label>
+              <div class="location-field">
+                <div class="location-dot drop"></div>
+                <input type="text" id="rideTo" placeholder="Enter destination" required>
+              </div>
+            </div>
+          </div>
+          
+          <div class="three-col">
+            <div class="field">
+              <label>Date</label>
+              <input type="date" id="rideDate" required>
+            </div>
+            <div class="field">
+              <label>Time</label>
+              <input type="time" id="rideTime" required>
+            </div>
+            <div class="field">
+              <label>Base Cost per Seat (₹)</label>
+              <input type="number" id="rideCost" placeholder="350" min="1" required oninput="calculateProviderCost()">
+            </div>
+          </div>
+          
+          <div class="field">
+            <label>Available Seats</label>
+            <div class="seat-control">
+              <button type="button" class="btn-icon" onclick="changeSeats(-1)">−</button>
+              <span class="seat-number" id="availableSeats">3</span>
+              <button type="button" class="btn-icon" onclick="changeSeats(1)">+</button>
+            </div>
+          </div>
+          
+          <div class="cost-card">
+            <div style="font-family: 'Syne', sans-serif; font-size: 18px; margin-bottom: 16px;">💰 Earnings Estimate</div>
+            <div class="cost-row">
+              <span>Cost per seat</span>
+              <span class="cost-value" id="costPerSeat">₹0</span>
+            </div>
+            <div class="cost-row">
+              <span>Available seats</span>
+              <span class="cost-value" id="seatCount">3 seats</span>
+            </div>
+            <div class="cost-row">
+              <span>Platform fee (5%)</span>
+              <span class="cost-value" id="platformFee">-₹0</span>
+            </div>
+            <div class="cost-row total">
+              <span>You'll earn approximately</span>
+              <span style="color: var(--green); font-family: 'Syne', sans-serif; font-size: 24px;" id="totalEarnings">₹0</span>
+            </div>
+          </div>
+          
+          <button type="submit" class="btn-primary" style="margin-top: 24px;">Post Ride →</button>
+        </form>
+      </div>
+    </div>
+    
+    <!-- Seeker Dashboard -->
+    <div id="seekerDashboard" style="display: none;">
+      <div style="margin-bottom: 32px;">
+        <div style="font-size: 12px; font-weight: 600; letter-spacing: 2px; color: var(--accent); text-transform: uppercase; margin-bottom: 8px;">
+          Find Your Ride
+        </div>
+        <h1 style="font-family: 'Syne', sans-serif; font-size: 38px; font-weight: 800;">Search Rides</h1>
+      </div>
+      
+      <div class="search-filters">
+        <form id="searchRideForm">
+          <div class="two-col">
+            <div class="field">
+              <label>From</label>
+              <div class="location-field">
+                <div class="location-dot pickup"></div>
+                <input type="text" id="searchFrom" placeholder="Enter pickup location" required>
+              </div>
+            </div>
+            <div class="field">
+              <label>To</label>
+              <div class="location-field">
+                <div class="location-dot drop"></div>
+                <input type="text" id="searchTo" placeholder="Enter destination" required>
+              </div>
+            </div>
+          </div>
+          
+          <div class="three-col">
+            <div class="field">
+              <label>Date</label>
+              <input type="date" id="searchDate">
+            </div>
+            <div class="field">
+              <label>Seats Needed</label>
+              <div class="seat-control">
+                <button type="button" class="btn-icon" onclick="changeNeededSeats(-1)">−</button>
+                <span class="seat-number" id="neededSeats" style="color: var(--green);">1</span>
+                <button type="button" class="btn-icon" onclick="changeNeededSeats(1)">+</button>
+              </div>
+            </div>
+            <div class="field" style="display: flex; align-items: flex-end;">
+              <button type="submit" class="btn-primary" style="margin: 0;">Search Rides →</button>
+            </div>
+          </div>
+        </form>
+      </div>
+      
+      <div id="searchResults">
+        <!-- Results will be populated here -->
+        <div class="empty-state">
+          <div class="empty-state-icon">🔍</div>
+          <h3 style="font-family: 'Syne', sans-serif; margin-bottom: 8px;">Search for rides</h3>
+          <p>Enter your pickup and drop locations to find available rides</p>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+<!-- ==================== RIDES PAGE ==================== -->
+<div id="rides" class="page">
+  <div style="max-width: 1200px; margin: 0 auto; padding: 40px;">
+    <h1 style="font-family: 'Syne', sans-serif; font-size: 38px; font-weight: 800; margin-bottom: 32px;">My Rides</h1>
+    <div id="myRidesList">
+      <div class="loading">Loading your rides...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== BOOKINGS PAGE ==================== -->
+<div id="bookings" class="page">
+  <div style="max-width: 1000px; margin: 0 auto; padding: 40px;">
+    <h1 style="font-family: 'Syne', sans-serif; font-size: 38px; font-weight: 800; margin-bottom: 32px;">My Bookings</h1>
+    
+    <div class="tabs">
+      <button class="tab active" onclick="switchBookingTab('my')" id="tabMy">My Requests</button>
+      <button class="tab" onclick="switchBookingTab('requests')" id="tabRequests" style="display: none;">Incoming Requests</button>
+    </div>
+    
+    <div id="bookingsContent">
+      <div class="loading">Loading bookings...</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PROFILE PAGE ==================== -->
+<div id="profile" class="page">
+  <div style="max-width: 800px; margin: 0 auto; padding: 40px;">
+    <div id="profileContent">
+      <div class="loading">Loading profile...</div>
+    </div>
+    
+    <!-- Documents Section -->
+    <div class="card" style="margin-top: 24px;">
+      <h2 style="font-family: 'Syne', sans-serif; font-size: 24px; margin-bottom: 24px;">📋 Required Documents</h2>
+      <p style="color: var(--muted); margin-bottom: 24px; font-size: 14px;">
+        Please upload clear, readable images. All documents are verified within 24 hours.
+      </p>
+      
+      <div class="doc-grid" id="documentsGrid">
+        <!-- Student ID - Required for all -->
+        <div class="doc-card" id="docStudentId" onclick="triggerUpload('studentId')">
+          <div class="doc-icon">🎓</div>
+          <div class="doc-title">Student ID Card</div>
+          <div class="doc-status">Required • Click to upload</div>
+          <input type="file" id="uploadStudentId" accept="image/*" onchange="handleFileUpload('studentId', this)">
+        </div>
+        
+        <!-- Profile Photo - Required for all -->
+        <div class="doc-card" id="docPhoto" onclick="triggerUpload('photo')">
+          <div class="doc-icon">📸</div>
+          <div class="doc-title">Profile Photo</div>
+          <div class="doc-status">Required • Clear face photo</div>
+          <input type="file" id="uploadPhoto" accept="image/*" onchange="handleFileUpload('photo', this)">
+        </div>
+        
+        <!-- Driving License - Required for providers -->
+        <div class="doc-card" id="docLicense" onclick="triggerUpload('license')" style="display: none;">
+          <div class="doc-icon">🪪</div>
+          <div class="doc-title">Driving License</div>
+          <div class="doc-status">Required for providers</div>
+          <input type="file" id="uploadLicense" accept="image/*" onchange="handleFileUpload('license', this)">
+        </div>
+        
+        <!-- Vehicle Registration - Required for providers -->
+        <div class="doc-card" id="docVehicle" onclick="triggerUpload('vehicle')" style="display: none;">
+          <div class="doc-icon">🚗</div>
+          <div class="doc-title">Vehicle Registration</div>
+          <div class="doc-status">Required for providers</div>
+          <input type="file" id="uploadVehicle" accept="image/*" onchange="handleFileUpload('vehicle', this)">
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ==========================================
+// CONFIGURATION
+// ==========================================
+const API_URL = 'https://freewheel-fykp.onrender.com'; // Change to your Render URL
+
+// ==========================================
+// STATE MANAGEMENT
+// ==========================================
+let token = localStorage.getItem('token');
+let currentUser = null;
+let currentRole = 'seeker';
+let seatsAvailable = 3;
+let seatsNeeded = 1;
+let bookingTab = 'my';
+
+// ==========================================
+// AUTHENTICATION
+// ==========================================
+function switchAuthTab(tab) {
+  document.getElementById('loginForm').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('registerForm').style.display = tab === 'register' ? 'block' : 'none';
+  document.getElementById('loginTab').classList.toggle('active', tab === 'login');
+  document.getElementById('registerTab').classList.toggle('active', tab === 'register');
+}
+
+function selectRole(role) {
+  document.getElementById('regRole').value = role;
+  document.getElementById('roleProvider').style.borderColor = role === 'provider' ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('roleSeeker').style.borderColor = role === 'seeker' ? 'var(--green)' : 'var(--border)';
+}
+
+// Initialize default role selection
+selectRole('seeker');
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const data = await api('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({
+        email: document.getElementById('loginEmail').value,
+        password: document.getElementById('loginPassword').value
+      })
+    });
+    
+    token = data.token;
+    currentUser = data.user;
+    currentRole = currentUser.role;
+    localStorage.setItem('token', token);
+    
+    initializeApp();
+  } catch (err) {
+    document.getElementById('loginError').textContent = err.message;
+  }
+});
+
+document.getElementById('registerForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    const data = await api('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: document.getElementById('regName').value,
+        email: document.getElementById('regEmail').value,
+        password: document.getElementById('regPassword').value,
+        phone: document.getElementById('regPhone').value,
+        role: document.getElementById('regRole').value,
+        college: document.getElementById('regCollege').value
+      })
+    });
+    
+    token = data.token;
+    currentUser = data.user;
+    currentRole = currentUser.role;
+    localStorage.setItem('token', token);
+    
+    initializeApp();
+  } catch (err) {
+    document.getElementById('registerError').textContent = err.message;
+  }
+});
+
+function logout() {
+  token = null;
+  currentUser = null;
+  localStorage.removeItem('token');
+  document.getElementById('navTabs').style.display = 'none';
+  showPage('auth');
+}
+
+// ==========================================
+// API HELPER
+// ==========================================
+async function api(endpoint, options = {}) {
+  const url = `${API_URL}${endpoint}`;
+  const config = {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  };
+  
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  const response = await fetch(url, config);
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || 'Something went wrong');
+  }
+  
+  return data;
+}
+
+// ==========================================
+// NAVIGATION
+// ==========================================
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(pageId).classList.add('active');
+  
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  
+  if (pageId === 'dashboard') {
+    document.getElementById('navDashboard')?.classList.add('active');
+    loadDashboard();
+  } else if (pageId === 'rides') {
+    document.getElementById('navRides')?.classList.add('active');
+    loadMyRides();
+  } else if (pageId === 'bookings') {
+    document.getElementById('navBookings')?.classList.add('active');
+    loadBookings();
+  } else if (pageId === 'profile') {
+    document.getElementById('navProfile')?.classList.add('active');
+    loadProfile();
+  }
+}
+
+function initializeApp() {
+  document.getElementById('navTabs').style.display = 'flex';
+  
+  // Show/hide nav items based on role
+  const isProvider = currentRole === 'provider' || currentRole === 'both';
+  document.getElementById('navRides').style.display = isProvider ? 'block' : 'none';
+  document.getElementById('tabRequests').style.display = isProvider ? 'block' : 'none';
+  
+  // Show/hide provider documents
+  document.getElementById('docLicense').style.display = isProvider ? 'block' : 'none';
+  document.getElementById('docVehicle').style.display = isProvider ? 'block' : 'none';
+  
+  showPage('dashboard');
+}
+
+// ==========================================
+// DASHBOARD FUNCTIONS
+// ==========================================
+function loadDashboard() {
+  const isProvider = currentRole === 'provider' || currentRole === 'both';
+  document.getElementById('providerDashboard').style.display = isProvider ? 'block' : 'none';
+  document.getElementById('seekerDashboard').style.display = !isProvider || currentRole === 'both' ? 'block' : 'none';
+  
+  // Set today's date as min
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('rideDate')?.setAttribute('min', today);
+  document.getElementById('searchDate')?.setAttribute('min', today);
+}
+
+// Provider: Seat management
+function changeSeats(delta) {
+  const newSeats = seatsAvailable + delta;
+  if (newSeats >= 1 && newSeats <= 8) {
+    seatsAvailable = newSeats;
+    document.getElementById('availableSeats').textContent = seatsAvailable;
+    calculateProviderCost();
+  }
+}
+
+function calculateProviderCost() {
+  const costPerSeat = parseInt(document.getElementById('rideCost').value) || 0;
+  const total = costPerSeat * seatsAvailable;
+  const platformFee = Math.round(total * 0.05);
+  const earnings = total - platformFee;
+  
+  document.getElementById('costPerSeat').textContent = `₹${costPerSeat}`;
+  document.getElementById('seatCount').textContent = `${seatsAvailable} seat${seatsAvailable > 1 ? 's' : ''}`;
+  document.getElementById('platformFee').textContent = `-₹${platformFee}`;
+  document.getElementById('totalEarnings').textContent = `₹${earnings}`;
+}
+
+// Seeker: Seat management
+function changeNeededSeats(delta) {
+  const newSeats = seatsNeeded + delta;
+  if (newSeats >= 1 && newSeats <= 4) {
+    seatsNeeded = newSeats;
+    document.getElementById('neededSeats').textContent = seatsNeeded;
+  }
+}
+
+// Create Ride
+document.getElementById('createRideForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  try {
+    // Geocode locations (simplified - in production use Google Maps API)
+    const fromCoords = await geocodeLocation(document.getElementById('rideFrom').value);
+    const toCoords = await geocodeLocation(document.getElementById('rideTo').value);
+    
+    await api('/ride/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        pickup: { type: 'Point', coordinates: fromCoords },
+        drop: { type: 'Point', coordinates: toCoords },
+        date: document.getElementById('rideDate').value,
+        time: document.getElementById('rideTime').value,
+        seatsAvailable: seatsAvailable,
+        costPerSeat: parseInt(document.getElementById('rideCost').value)
+      })
+    });
+    
+    alert('Ride posted successfully!');
+    document.getElementById('createRideForm').reset();
+    seatsAvailable = 3;
+    document.getElementById('availableSeats').textContent = seatsAvailable;
+    calculateProviderCost();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+// Search Rides
+document.getElementById('searchRideForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const resultsDiv = document.getElementById('searchResults');
+  resultsDiv.innerHTML = '<div class="loading">Searching for rides...</div>';
+  
+  try {
+    // In production, geocode the search location and use actual coordinates
+    const rides = await api('/ride/search?lat=12.9716&lng=77.5946&maxDistance=50000');
+    
+    if (rides.length === 0) {
+      resultsDiv.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">😕</div>
+          <h3>No rides found</h3>
+          <p>Try adjusting your search or check back later</p>
+        </div>
+      `;
+      return;
+    }
+    
+    resultsDiv.innerHTML = rides.map(ride => `
+      <div class="ride-card">
+        <div>
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <span class="badge ${ride.status === 'active' ? 'badge-success' : 'badge-warning'}">${ride.status}</span>
+            <span style="color: var(--muted); font-size: 14px;">${new Date(ride.date).toLocaleDateString()} • ${ride.time}</span>
+          </div>
+          <div class="ride-route">
+            <span style="color: var(--green);">●</span>
+            <span>Pickup Location</span>
+            <div class="route-line"></div>
+            <span>Drop Location</span>
+            <span style="color: var(--accent2);">●</span>
+          </div>
+          <div style="display: flex; gap: 24px; font-size: 14px; color: var(--muted);">
+            <span><strong style="color: var(--text);">${ride.seatsAvailable}</strong> seats left</span>
+            <span><strong style="color: var(--accent);">₹${ride.costPerSeat}</strong> per seat</span>
+            ${ride.providerId ? `<span>by <strong style="color: var(--text);">${ride.providerId.name}</strong> ⭐ ${ride.providerId.rating || 'New'}</span>` : ''}
+          </div>
+        </div>
+        ${ride.seatsAvailable >= seatsNeeded ? `
+          <button class="btn-primary" style="width: auto;" onclick="bookRide('${ride._id}', ${ride.costPerSeat})">
+            Book ${seatsNeeded} seat${seatsNeeded > 1 ? 's' : ''}<br>
+            <small>₹${ride.costPerSeat * seatsNeeded} total</small>
+          </button>
+        ` : '<span class="badge badge-warning">Not enough seats</span>'}
+      </div>
+    `).join('');
+    
+  } catch (err) {
+    resultsDiv.innerHTML = `<div class="error">${err.message}</div>`;
+  }
+});
+
+async function bookRide(rideId, costPerSeat) {
+  const totalCost = costPerSeat * seatsNeeded;
+  if (!confirm(`Book ${seatsNeeded} seat${seatsNeeded > 1 ? 's' : ''} for ₹${totalCost}?`)) return;
+  
+  try {
+    await api('/booking/request', {
+      method: 'POST',
+      body: JSON.stringify({ rideId, seatsRequested: seatsNeeded })
+    });
+    alert('Booking request sent!');
+    document.getElementById('searchRideForm').dispatchEvent(new Event('submit'));
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// ==========================================
+// RIDES PAGE
+// ==========================================
+async function loadMyRides() {
+  const container = document.getElementById('myRidesList');
+  container.innerHTML = '<div class="loading">Loading your rides...</div>';
+  
+  try {
+    // Use search endpoint with provider filter instead of /my
+    // This gets all rides and filters for current user
+    const allRides = await api('/ride/search?lat=0&lng=0&maxDistance=10000000');
+    const myRides = allRides.filter(ride => 
+      ride.providerId && ride.providerId._id === currentUser.id
+    );
+    
+    if (!myRides || myRides.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">🚗</div>
+          <h3 style="font-family: 'Syne', sans-serif; margin-bottom: 12px;">No rides posted yet</h3>
+          <p style="color: var(--muted); margin-bottom: 24px;">Create your first ride to start earning</p>
+          <button class="btn-primary" style="width: auto; padding: 12px 32px;" onclick="showPage('dashboard')">
+            Offer a Ride →
+          </button>
+        </div>
+      `;
+      return;
+    }
+    
+    // Calculate stats
+    const activeRides = myRides.filter(r => r.status === 'active').length;
+    const totalEarnings = myRides.reduce((sum, r) => {
+      const bookedSeats = (r.totalSeats || r.seatsAvailable + 1) - r.seatsAvailable;
+      return sum + (bookedSeats * (r.costPerSeat || 0));
+    }, 0);
+    
+    container.innerHTML = `
+      <!-- Stats Overview -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 32px;">
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 32px; font-family: 'Syne', sans-serif; color: var(--accent);">${myRides.length}</div>
+          <div style="color: var(--muted); font-size: 14px; margin-top: 4px;">Total Rides</div>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 32px; font-family: 'Syne', sans-serif; color: var(--green);">${activeRides}</div>
+          <div style="color: var(--muted); font-size: 14px; margin-top: 4px;">Active</div>
+        </div>
+        <div class="card" style="text-align: center;">
+          <div style="font-size: 32px; font-family: 'Syne', sans-serif; color: var(--accent);">₹${totalEarnings}</div>
+          <div style="color: var(--muted); font-size: 14px; margin-top: 4px;">Total Earnings</div>
+        </div>
+      </div>
+      
+      <!-- Rides List -->
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        ${myRides.map(ride => {
+          const date = new Date(ride.date);
+          const isToday = new Date().toDateString() === date.toDateString();
+          const bookedSeats = (ride.totalSeats || ride.seatsAvailable + 1) - ride.seatsAvailable;
+          
+          return `
+            <div class="ride-card" style="flex-direction: column; align-items: stretch;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                    <span class="badge ${ride.status === 'active' ? 'badge-success' : 'badge-warning'}">
+                      ${ride.status === 'active' ? '● Active' : ride.status}
+                    </span>
+                    ${isToday ? '<span class="badge" style="background: var(--accent2); color: white;">Today</span>' : ''}
+                  </div>
+                  <h3 style="font-family: Syne, sans-serif; font-size: 20px; margin-bottom: 4px;">
+                    ${date.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })} • ${ride.time}
+                  </h3>
+                </div>
+                <div style="text-align: right;">
+                  <div style="font-family: Syne, sans-serif; font-size: 28px; color: var(--accent);">₹${ride.costPerSeat}</div>
+                  <div style="color: var(--muted); font-size: 13px;">per seat</div>
+                </div>
+              </div>
+              
+              <div style="background: var(--surface2); border-radius: 12px; padding: 16px; margin-bottom: 16px;">
+                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+                  <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--green);"></div>
+                  <span style="flex: 1;">From: Pickup Location</span>
+                </div>
+                <div style="width: 2px; height: 20px; background: var(--border); margin-left: 5px; margin-bottom: 12px;"></div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <div style="width: 12px; height: 12px; border-radius: 50%; background: var(--accent2);"></div>
+                  <span style="flex: 1;">To: Drop Location</span>
+                </div>
+              </div>
+              
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; gap: 24px;">
+                  <div>
+                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px;">Available</div>
+                    <div style="font-size: 20px; font-weight: 600; color: ${ride.seatsAvailable > 0 ? 'var(--green)' : 'var(--accent2)'};">
+                      ${ride.seatsAvailable} seat${ride.seatsAvailable !== 1 ? 's' : ''}
+                    </div>
+                  </div>
+                  <div>
+                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px;">Booked</div>
+                    <div style="font-size: 20px; font-weight: 600;">${bookedSeats} seat${bookedSeats !== 1 ? 's' : ''}</div>
+                  </div>
+                  <div>
+                    <div style="font-size: 12px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px;">Earnings</div>
+                    <div style="font-size: 20px; font-weight: 600; color: var(--accent);">₹${bookedSeats * ride.costPerSeat}</div>
+                  </div>
+                </div>
+                <button class="btn-secondary" onclick="viewRideRequests('${ride._id}')">
+                  View Requests
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
+    
+  } catch (err) {
+    console.error('Error loading rides:', err);
+    container.innerHTML = `
+      <div class="card" style="text-align: center; padding: 60px;">
+        <div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>
+        <h3 style="font-family: 'Syne', sans-serif; margin-bottom: 12px; color: var(--accent2);">Failed to load rides</h3>
+        <p style="color: var(--muted); margin-bottom: 24px;">${err.message}</p>
+        <button class="btn-secondary" onclick="loadMyRides()">Try Again</button>
+      </div>
+    `;
+  }
+}
+
+// Add this function to handle ride cancellation
+async function cancelRide(rideId) {
+  if (!confirm('Are you sure you want to cancel this ride? This will notify all booked passengers.')) return;
+  
+  try {
+    await api(`/ride/${rideId}`, {
+      method: 'DELETE'
+    });
+    alert('Ride cancelled successfully');
+    loadMyRides();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+// ==========================================
+// BOOKINGS PAGE
+// ==========================================
+function switchBookingTab(tab) {
+  bookingTab = tab;
+  document.getElementById('tabMy').classList.toggle('active', tab === 'my');
+  document.getElementById('tabRequests').classList.toggle('active', tab === 'requests');
+  loadBookings();
+}
+
+async function loadBookings() {
+  const container = document.getElementById('bookingsContent');
+  
+  try {
+    const endpoint = bookingTab === 'my' ? '/booking/my' : '/booking/requests';
+    const bookings = await api(endpoint);
+    
+    if (bookings.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">${bookingTab === 'my' ? '🎒' : '📬'}</div>
+          <h3>${bookingTab === 'my' ? 'No bookings yet' : 'No pending requests'}</h3>
+          <p>${bookingTab === 'my' ? 'Search for rides to get started' : 'Requests will appear here when someone books your ride'}</p>
+        </div>
+      `;
+      return;
+    }
+    
+    container.innerHTML = bookings.map(b => {
+      const other = bookingTab === 'my' ? b.rideId?.providerId : b.seekerId;
+      return `
+        <div class="card">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <span class="badge ${b.status === 'accepted' ? 'badge-success' : b.status === 'pending' ? 'badge-warning' : 'badge-warning'}">
+                ${b.status}
+              </span>
+              <h3 style="margin: 12px 0 4px;">${other?.name || 'Unknown'}</h3>
+              <p style="color: var(--muted); font-size: 14px;">${other?.college || ''} ${other?.phone ? '• ' + other.phone : ''}</p>
+              ${b.rideId ? `
+                <p style="margin-top: 12px; color: var(--muted);">
+                  ${new Date(b.rideId.date).toLocaleDateString()} • ${b.rideId.time} • ₹${b.rideId.costPerSeat}
+                </p>
+              ` : ''}
+            </div>
+            ${bookingTab === 'requests' && b.status === 'pending' ? `
+              <div style="display: flex; gap: 8px;">
+                <button class="btn-secondary" style="background: var(--green); color: #000; border-color: var(--green);" onclick="respondBooking('${b._id}', 'accepted')">Accept</button>
+                <button class="btn-secondary" style="color: var(--accent2); border-color: var(--accent2);" onclick="respondBooking('${b._id}', 'rejected')">Decline</button>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+    
+  } catch (err) {
+    container.innerHTML = `<div class="error">${err.message}</div>`;
+  }
+}
+
+async function respondBooking(bookingId, status) {
+  try {
+    await api('/booking/respond', {
+      method: 'PUT',
+      body: JSON.stringify({ bookingId, status })
+    });
+    loadBookings();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+// ==========================================
+// PROFILE PAGE
+// ==========================================
+async function loadProfile() {
+  const container = document.getElementById('profileContent');
+  
+  try {
+    const profile = await api('/users/profile');
+    
+    // Update document statuses
+    if (profile.verified?.studentId) markDocUploaded('studentId');
+    if (profile.verified?.license) markDocUploaded('license');
+    // Add more as needed
+    
+    container.innerHTML = `
+      <div class="card">
+        <div class="profile-header">
+          <div class="avatar">${profile.name[0].toUpperCase()}</div>
+          <div>
+            <h2 style="font-family: 'Syne', sans-serif; font-size: 28px; margin-bottom: 8px;">${profile.name}</h2>
+            <p style="color: var(--muted); margin-bottom: 8px;">${profile.email}</p>
+            <div style="display: flex; gap: 8px;">
+              <span class="badge badge-${profile.role === 'provider' ? 'provider' : 'seeker'}">${profile.role.toUpperCase()}</span>
+              ${profile.rating > 0 ? `<span class="badge badge-success">⭐ ${profile.rating}</span>` : ''}
+            </div>
+          </div>
+        </div>
+        
+        <div class="two-col" style="margin-top: 24px;">
+          <div>
+            <label style="color: var(--muted); font-size: 12px; text-transform: uppercase;">Phone</label>
+            <p style="font-size: 18px; margin-top: 4px;">${profile.phone}</p>
+          </div>
+          <div>
+            <label style="color: var(--muted); font-size: 12px; text-transform: uppercase;">College</label>
+            <p style="font-size: 18px; margin-top: 4px;">${profile.college}</p>
+          </div>
+          <div>
+            <label style="color: var(--muted); font-size: 12px; text-transform: uppercase;">Total Rides</label>
+            <p style="font-size: 18px; margin-top: 4px;">${profile.totalRides || 0}</p>
+          </div>
+          <div>
+            <label style="color: var(--muted); font-size: 12px; text-transform: uppercase;">Member Since</label>
+            <p style="font-size: 18px; margin-top: 4px;">${new Date(profile.createdAt).toLocaleDateString()}</p>
+          </div>
+        </div>
+      </div>
+    `;
+    
+  } catch (err) {
+    container.innerHTML = `<div class="error">${err.message}</div>`;
+  }
+}
+
+// ==========================================
+// DOCUMENT UPLOAD
+// ==========================================
+function triggerUpload(docType) {
+  document.getElementById(`upload${docType.charAt(0).toUpperCase() + docType.slice(1)}`)?.click();
+}
+
+function handleFileUpload(docType, input) {
+  if (input.files && input.files[0]) {
+    // In production, upload to server/cloud storage
+    markDocUploaded(docType);
+    alert(`${docType} uploaded successfully! Verification pending.`);
+  }
+}
+
+function markDocUploaded(docType) {
+  const card = document.getElementById(`doc${docType.charAt(0).toUpperCase() + docType.slice(1)}`);
+  if (card) {
+    card.classList.add('uploaded');
+    const status = card.querySelector('.doc-status');
+    if (status) status.textContent = '✓ Uploaded • Pending verification';
+  }
+}
+
+// ==========================================
+// UTILITY FUNCTIONS
+// ==========================================
+async function geocodeLocation(address) {
+  // In production, use Google Maps Geocoding API
+  // For demo, return random coordinates near Bangalore
+  return [77.5946 + (Math.random() - 0.5) * 0.1, 12.9716 + (Math.random() - 0.5) * 0.1];
+}
+
+// ==========================================
+// INITIALIZATION
+// ==========================================
+if (token) {
+  api('/auth/me').then(user => {
+    currentUser = user;
+    currentRole = user.role;
+    initializeApp();
+  }).catch(() => {
+    logout();
+  });
+}
+</script>
+
+</body>
+</html>

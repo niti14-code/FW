@@ -1,5 +1,31 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Link, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+
+// ==========================================
+// API CONFIGURATION - CHANGE THIS
+// ==========================================
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+
+// Helper function for API calls
+const apiCall = async (endpoint, options = {}) => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const config = {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  };
+  
+  const response = await fetch(url, config);
+  const data = await response.json();
+  
+  if (!response.ok) {
+    throw new Error(data.message || 'Something went wrong');
+  }
+  
+  return data;
+};
 
 // ==========================================
 // CONTEXT & AUTH
@@ -21,17 +47,12 @@ const AuthProvider = ({ children }) => {
 
   const fetchUser = async () => {
     try {
-      const res = await fetch('http://localhost:5000/auth/me', {
+      const data = await apiCall('/auth/me', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data);
-      } else {
-        logout();
-      }
+      setUser(data);
     } catch (error) {
-      console.error(error);
+      logout();
     }
     setLoading(false);
   };
@@ -96,7 +117,6 @@ const GlobalStyles = () => (
       to { opacity: 1; transform: translateY(0); }
     }
 
-    /* Form Elements */
     .field { margin-bottom: 20px; }
     .field label {
       display: block; font-size: 12px; font-weight: 500;
@@ -151,7 +171,6 @@ const GlobalStyles = () => (
       .two-col { grid-template-columns: 1fr; }
     }
 
-    /* Cards */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -166,7 +185,6 @@ const GlobalStyles = () => (
       margin-bottom: 16px;
     }
 
-    /* Status Badges */
     .badge {
       padding: 4px 12px; border-radius: 100px;
       font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
@@ -176,7 +194,6 @@ const GlobalStyles = () => (
     .badge-warning { background: rgba(245,166,35,0.12); color: var(--accent); }
     .badge-danger { background: rgba(232,85,46,0.12); color: var(--accent2); }
 
-    /* Loading Spinner */
     .spinner {
       width: 20px; height: 20px;
       border: 2px solid var(--border);
@@ -313,15 +330,10 @@ const LoginPage = () => {
         ? { email: formData.email, password: formData.password }
         : formData;
 
-      const res = await fetch(`http://localhost:5000${endpoint}`, {
+      const data = await apiCall(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
       });
-
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.message || 'Something went wrong');
       
       login(data.token, data.user);
       navigate('/rides');
@@ -597,10 +609,9 @@ const RidesPage = () => {
 
   const fetchRides = async () => {
     try {
-      const res = await fetch('http://localhost:5000/ride/search?lat=12.9716&lng=77.5946&maxDistance=50000', {
+      const data = await apiCall('/ride/search?lat=12.9716&lng=77.5946&maxDistance=50000', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await res.json();
       setRides(data);
     } catch (err) {
       setError('Failed to fetch rides');
@@ -611,10 +622,9 @@ const RidesPage = () => {
 
   const fetchMyRides = async () => {
     try {
-      const res = await fetch('http://localhost:5000/ride/my', {
+      const data = await apiCall('/ride/my', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await res.json();
       setMyRides(data);
     } catch (err) {
       console.error(err);
@@ -624,16 +634,11 @@ const RidesPage = () => {
   const handleCreateRide = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:5000/ride/create', {
+      await apiCall('/ride/create', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(createForm)
       });
-      
-      if (!res.ok) throw new Error('Failed to create ride');
       
       setShowCreate(false);
       fetchMyRides();
@@ -645,16 +650,11 @@ const RidesPage = () => {
 
   const handleBookRide = async (rideId) => {
     try {
-      const res = await fetch('http://localhost:5000/booking/request', {
+      await apiCall('/booking/request', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ rideId })
       });
-      
-      if (!res.ok) throw new Error('Failed to book ride');
       
       alert('Booking request sent!');
       fetchRides();
@@ -874,10 +874,9 @@ const BookingsPage = () => {
 
   const fetchBookings = async () => {
     try {
-      const res = await fetch('http://localhost:5000/booking/my', {
+      const data = await apiCall('/booking/my', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await res.json();
       setBookings(data);
     } catch (err) {
       console.error(err);
@@ -888,10 +887,9 @@ const BookingsPage = () => {
 
   const fetchRequests = async () => {
     try {
-      const res = await fetch('http://localhost:5000/booking/requests', {
+      const data = await apiCall('/booking/requests', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await res.json();
       setRequests(data);
     } catch (err) {
       console.error(err);
@@ -900,16 +898,11 @@ const BookingsPage = () => {
 
   const handleRespond = async (bookingId, status) => {
     try {
-      const res = await fetch('http://localhost:5000/booking/respond', {
+      await apiCall('/booking/respond', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ bookingId, status })
       });
-      
-      if (!res.ok) throw new Error('Failed to respond');
       
       fetchRequests();
       fetchBookings();
@@ -1084,10 +1077,9 @@ const ProfilePage = () => {
 
   const fetchProfile = async () => {
     try {
-      const res = await fetch('http://localhost:5000/users/profile', {
+      const data = await apiCall('/users/profile', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      const data = await res.json();
       setProfile(data);
       setFormData(data);
     } catch (err) {
@@ -1100,15 +1092,11 @@ const ProfilePage = () => {
   const handleUpdate = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('http://localhost:5000/users/profile', {
+      const data = await apiCall('/users/profile', {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(formData)
       });
-      const data = await res.json();
       setProfile(data);
       setEditing(false);
     } catch (err) {
