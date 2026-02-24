@@ -5,8 +5,17 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   phone: { type: String, required: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['provider', 'seeker', 'both'], required: true },
-  college: { type: String, required: true },
+  role: { 
+    type: String, 
+    enum: ['provider', 'seeker', 'both', 'admin'],  // Added 'admin'
+    required: true 
+  },
+  college: { 
+    type: String, 
+    required: function() { 
+      return this.role !== 'admin'; 
+    } 
+  },
   rating: { type: Number, default: 0 },
   totalRides: { type: Number, default: 0 },
   verified: {

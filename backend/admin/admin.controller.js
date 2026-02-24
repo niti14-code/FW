@@ -2,6 +2,7 @@ const User = require('../users/users.model');
 const Ride = require('../rides/rides.model');
 const Booking = require('../bookings/bookings.model');
 const Tracking = require('../tracking/tracking.model');
+const Admin = require('./admin.model'); // ADD THIS IMPORT
 
 // ==========================================
 // DASHBOARD ANALYTICS
@@ -430,6 +431,7 @@ exports.getPopularRoutes = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 // ==========================================
 // ADMIN REGISTRATION (One-time setup)
 // ==========================================
@@ -452,6 +454,18 @@ exports.registerAdmin = async (req, res) => {
       user.role = 'admin';
       await user.save();
       
+      // Also create admin record
+      let admin = await Admin.findOne({ userId: user._id });
+      if (!admin) {
+        admin = new Admin({
+          userId: user._id,
+          email: user.email,
+          role: 'admin',
+          permissions: ['users', 'rides', 'bookings', 'verifications', 'reports']
+        });
+        await admin.save();
+      }
+      
       return res.json({
         message: 'User updated to admin',
         user: {
@@ -473,7 +487,7 @@ exports.registerAdmin = async (req, res) => {
       email,
       password: hashedPassword,
       phone,
-      role: 'admin', // Set role as admin
+      role: 'admin',
       college: 'Admin',
       verified: {
         email: true,
@@ -483,6 +497,15 @@ exports.registerAdmin = async (req, res) => {
     });
     
     await user.save();
+    
+    // Create admin record
+    const admin = new Admin({
+      userId: user._id,
+      email: user.email,
+      role: 'admin',
+      permissions: ['users', 'rides', 'bookings', 'verifications', 'reports']
+    });
+    await admin.save();
     
     // Generate token
     const jwt = require('jsonwebtoken');
