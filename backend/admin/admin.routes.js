@@ -4,7 +4,10 @@ const auth = require('../middleware/auth');
 const { isAdmin, isSuperAdmin } = require('./admin.middleware');
 const controller = require('./admin.controller');
 
-// All routes require authentication + admin role
+// PUBLIC: Admin registration (protected by secret key)
+router.post('/register', controller.registerAdmin);
+
+// All routes below require authentication + admin role
 router.use(auth, isAdmin);
 
 // Dashboard

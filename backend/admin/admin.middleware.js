@@ -3,22 +3,24 @@ const User = require('../users/users.model');
 // Check if user is admin
 const isAdmin = async (req, res, next) => {
   try {
-    // Method 1: Check by email domain or specific emails
+    // Method 1: Check by specific admin emails
     const adminEmails = [
       'admin@freewheels.com',
-      'niti@gmail.com',
+      'superadmin@freewheels.com',
+      // Add more admin emails here
     ];
     
-    // Method 2: Check by role field (if you add 'admin' role)
-    // const user = await User.findById(req.user.userId);
-    // if (user.role !== 'admin') {
-    //   return res.status(403).json({ message: 'Admin access required' });
-    // }
+    // Method 2: Check by role field (recommended)
+    const user = await User.findById(req.user.userId);
     
-    if (!adminEmails.includes(req.user.email)) {
+    // Allow if email is in admin list OR role is 'admin'
+    const isAdminUser = adminEmails.includes(req.user.email) || user.role === 'admin';
+    
+    if (!isAdminUser) {
       return res.status(403).json({ 
         message: 'Admin access required',
-        yourEmail: req.user.email 
+        yourEmail: req.user.email,
+        yourRole: user.role
       });
     }
     
@@ -28,9 +30,8 @@ const isAdmin = async (req, res, next) => {
   }
 };
 
-// Optional: Super admin check (for critical operations)
 const isSuperAdmin = async (req, res, next) => {
-  const superAdminEmails = ['admin@freewheels.com'];
+  const superAdminEmails = ['superadmin@freewheels.com'];
   
   if (!superAdminEmails.includes(req.user.email)) {
     return res.status(403).json({ message: 'Super admin access required' });

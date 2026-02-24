@@ -430,3 +430,79 @@ exports.getPopularRoutes = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+// ==========================================
+// ADMIN REGISTRATION (One-time setup)
+// ==========================================
+
+exports.registerAdmin = async (req, res) => {
+  try {
+    const { name, email, password, phone, adminKey } = req.body;
+    
+    // Secret key to prevent unauthorized admin registration
+    const SECRET_ADMIN_KEY = process.env.ADMIN_SECRET_KEY || 'freewheels-admin-2024';
+    
+    if (adminKey !== SECRET_ADMIN_KEY) {
+      return res.status(403).json({ message: 'Invalid admin key' });
+    }
+    
+    // Check if user already exists
+    let user = await User.findOne({ email });
+    if (user) {
+      // Update existing user to admin
+      user.role = 'admin';
+      await user.save();
+      
+      return res.json({
+        message: 'User updated to admin',
+        user: {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role
+        }
+      });
+    }
+    
+    // Create new admin user
+    const bcrypt = require('bcryptjs');
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    
+    user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      phone,
+      role: 'admin', // Set role as admin
+      college: 'Admin',
+      verified: {
+        email: true,
+        studentId: true,
+        license: true
+      }
+    });
+    
+    await user.save();
+    
+    // Generate token
+    const jwt = require('jsonwebtoken');
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    res.status(201).json({
+      message: 'Admin registered successfully',
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
