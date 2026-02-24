@@ -101,6 +101,7 @@ app.use('/users', require('./users/users.routes'));
 app.use('/ride', require('./rides/rides.routes'));
 app.use('/booking', require('./bookings/bookings.routes'));
 app.use('/tracking', trackingRoutes);
+app.use('/admin', require('./admin/admin.routes'));
 
 // ==========================================
 // ERROR HANDLING
