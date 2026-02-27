@@ -17,3 +17,4 @@ Thumbs.db
 # Build/Dist folders (if applicable later)
 dist/
 build/
+frontend-not main/
