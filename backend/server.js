@@ -14,7 +14,7 @@ const app = express();
 const server = http.createServer(app);
 
 // ==========================================
-// CORS - ALLOW ALL ORIGINS
+// 1. CORS FIRST
 // ==========================================
 app.use(cors({
   origin: ['https://fw-mq8p.onrender.com', 'http://localhost:5173', 'http://localhost:3000'],
@@ -22,16 +22,24 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 // ==========================================
-// REQUEST LOGGING
+// 2. BODY PARSERS SECOND (CRITICAL!)
+// ==========================================
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// ==========================================
+// 3. LOGGING
 // ==========================================
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
+  console.log('Body:', req.body);  // Now this will show the body
   next();
 });
 
 // ==========================================
-// SOCKET.IO SETUP
+// 4. SOCKET.IO
 // ==========================================
 const io = socketIo(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
@@ -51,7 +59,7 @@ io.on("connection", (socket) => {
 });
 
 // ==========================================
-// ROUTES
+// 5. ROUTES LAST
 // ==========================================
 
 app.get('/', (req, res) => {
@@ -62,56 +70,27 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected' });
 });
 
-// ==========================================
-// API ROUTES - THESE MUST MATCH YOUR FRONTEND
-// ==========================================
-
-// Auth routes - /api/auth/register
+// API Routes
 app.use('/api/auth', require('./auth/auth.routes'));
-
-// User routes - /api/users/*
 app.use('/api/users', require('./users/users.routes'));
-
-// Ride routes - /api/rides/*
 app.use('/api/rides', require('./rides/rides.routes'));
-
-// Booking routes - /api/bookings/*
 app.use('/api/bookings', require('./bookings/bookings.routes'));
-
-// Tracking routes - /api/tracking/*
 app.use('/api/tracking', trackingRoutes);
-
-// Admin routes - /api/admin/*
 app.use('/api/admin', require('./admin/admin.routes'));
 
-// ==========================================
-// 404 HANDLER
-// ==========================================
+// 404 Handler
 app.use((req, res) => {
   console.log(`❌ 404 - Not Found: ${req.method} ${req.originalUrl}`);
-  res.status(404).json({ 
-    error: 'Route not found',
-    url: req.originalUrl,
-    method: req.method
-  });
+  res.status(404).json({ error: 'Route not found', url: req.originalUrl, method: req.method });
 });
 
-// ==========================================
-// ERROR HANDLER
-// ==========================================
+// Error Handler
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.message);
   res.status(500).json({ error: err.message });
 });
 
-// ==========================================
-// START SERVER
-// ==========================================
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📋 Available routes:`);
-  console.log(`   POST http://localhost:${PORT}/api/auth/register`);
-  console.log(`   POST http://localhost:${PORT}/api/auth/login`);
-  console.log(`   GET  http://localhost:${PORT}/api/auth/me`);
 });
