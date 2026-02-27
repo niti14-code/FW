@@ -11,7 +11,7 @@
 //    /booking/request /booking/respond /booking/my /booking/ride/:rideId
 // ══════════════════════════════════════════════════════════════════
 
-const BASE = '/api';   // proxied to backend in both dev and prod
+const BASE = import.meta.env.VITE_API_URL || '/api';   // proxied to backend in both dev and prod
 
 // ── Token / User helpers ──────────────────────────────────────────
 export const getToken  = ()  => localStorage.getItem('cr_token');
