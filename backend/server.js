@@ -5,7 +5,6 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const http = require("http");
 const socketIo = require("socket.io");
-const trackingRoutes = require("./tracking/tracking.routes");
 
 dotenv.config();
 connectDB();
@@ -14,7 +13,7 @@ const app = express();
 const server = http.createServer(app);
 
 // ==========================================
-// 1. CORS FIRST
+// 1. CORS
 // ==========================================
 const allowedOrigins = [
   'https://fw-mq8p.onrender.com',
@@ -24,9 +23,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
-    
     if (allowedOrigins.indexOf(origin) === -1) {
       console.log('❌ CORS blocked:', origin);
       return callback(new Error('CORS policy violation'), false);
@@ -39,7 +36,7 @@ app.use(cors({
 }));
 
 // ==========================================
-// 2. BODY PARSERS SECOND (CRITICAL!)
+// 2. BODY PARSERS
 // ==========================================
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -49,14 +46,7 @@ app.use(express.urlencoded({ extended: true }));
 // ==========================================
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  console.log('Body:', req.body);
   next();
-});
-console.log('🔌 MongoDB URI:', process.env.MONGODB_URI ? 'Set (hidden)' : 'NOT SET!');
-console.log('🗄️  Database name:', mongoose.connection.name || 'Not connected yet');
-
-mongoose.connection.on('connected', () => {
-  console.log('✅ MongoDB connected to:', mongoose.connection.name);
 });
 
 // ==========================================
@@ -80,7 +70,7 @@ io.on("connection", (socket) => {
 });
 
 // ==========================================
-// 5. ROUTES LAST
+// 5. ROUTES - EXPLICIT MOUNTING
 // ==========================================
 
 app.get('/', (req, res) => {
@@ -91,12 +81,294 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected' });
 });
 
-// API Routes - NO /api prefix, use singular paths
-app.use('/auth', require('./auth/auth.routes'));
-app.use('/users', require('./users/users.routes'));
-app.use('/ride', require('./rides/rides.routes'));
-app.use('/booking', require('./bookings/bookings.routes'));
+// Import auth middleware
+const auth = require('./middleware/auth');
+
+// Import models
+const User = require('./users/users.model');
+const Ride = require('./rides/rides.model');
+const Booking = require('./bookings/bookings.model');
+
+// --- AUTH ROUTES ---
+app.post('/auth/register', async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const jwt = require('jsonwebtoken');
+    const { name, email, password, phone, role, college } = req.body;
+    
+    let user = await User.findOne({ email });
+    if (user) return res.status(400).json({ message: 'User already exists' });
+    
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+    
+    user = new User({
+      name, email, password: hashedPassword, phone, role, 
+      college: role === 'admin' ? undefined : college
+    });
+    
+    await user.save();
+    
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    
+    res.status(201).json({
+      token,
+      user: { id: user._id, name: user.name, email: user.email, role: user.role, college: user.college, phone: user.phone }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post('/auth/login', async (req, res) => {
+  try {
+    const bcrypt = require('bcryptjs');
+    const jwt = require('jsonwebtoken');
+    const { email, password } = req.body;
+    
+    const user = await User.findOne({ email });
+    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+    
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+    
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    
+    res.json({
+      token,
+      user: { id: user._id, name: user.name, email: user.email, role: user.role, college: user.college, phone: user.phone }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.get('/auth/me', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// --- USER ROUTES ---
+app.get('/users/profile', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.put('/users/profile', auth, async (req, res) => {
+  try {
+    const updates = req.body;
+    delete updates.password;
+    const user = await User.findByIdAndUpdate(req.user.userId, updates, { new: true }).select('-password');
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// --- RIDE ROUTES ---
+app.post('/ride/create', auth, async (req, res) => {
+  try {
+    const { pickup, drop, date, time, seatsAvailable, costPerSeat } = req.body;
+    
+    const user = await User.findById(req.user.userId);
+    if (user.role === 'seeker') return res.status(403).json({ message: 'Only providers can create rides' });
+    
+    const ride = new Ride({
+      providerId: req.user.userId,
+      pickup: { type: 'Point', coordinates: pickup.coordinates },
+      drop: { type: 'Point', coordinates: drop.coordinates },
+      date, time, seatsAvailable, costPerSeat
+    });
+    
+    await ride.save();
+    res.status(201).json(ride);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.get('/ride/search', auth, async (req, res) => {
+  try {
+    const { lat, lng, maxDistance = 5000, date } = req.query;
+    
+    const query = {
+      pickup: {
+        $near: {
+          $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
+          $maxDistance: parseInt(maxDistance)
+        }
+      },
+      status: 'active',
+      seatsAvailable: { $gt: 0 }
+    };
+    
+    if (date) {
+      const searchDate = new Date(date);
+      query.date = { $gte: searchDate, $lt: new Date(searchDate.getTime() + 86400000) };
+    }
+    
+    const rides = await Ride.find(query).populate('providerId', 'name rating');
+    res.json(rides);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /ride/my - THIS IS THE KEY ROUTE!
+app.get('/ride/my', auth, async (req, res) => {
+  try {
+    console.log('✅ HIT /ride/my for user:', req.user.userId);
+    const rides = await Ride.find({ providerId: req.user.userId }).sort({ createdAt: -1 });
+    res.json(rides);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.get('/ride/:id', auth, async (req, res) => {
+  try {
+    const ride = await Ride.findById(req.params.id).populate('providerId', 'name phone rating');
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    res.json(ride);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.put('/ride/:id', auth, async (req, res) => {
+  try {
+    const ride = await Ride.findOne({ _id: req.params.id, providerId: req.user.userId });
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    
+    const updated = await Ride.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.delete('/ride/:id', auth, async (req, res) => {
+  try {
+    const ride = await Ride.findOneAndDelete({ _id: req.params.id, providerId: req.user.userId });
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    res.json({ message: 'Ride deleted' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// --- BOOKING ROUTES ---
+app.post('/booking/request', auth, async (req, res) => {
+  try {
+    const { rideId } = req.body;
+    
+    const user = await User.findById(req.user.userId);
+    if (user.role === 'provider') return res.status(403).json({ message: 'Providers cannot book' });
+    
+    const ride = await Ride.findById(rideId);
+    if (!ride || ride.seatsAvailable < 1) return res.status(400).json({ message: 'No seats available' });
+    
+    const booking = new Booking({ rideId, seekerId: req.user.userId });
+    await booking.save();
+    
+    ride.seatsAvailable -= 1;
+    await ride.save();
+    
+    res.status(201).json(booking);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.put('/booking/respond', auth, async (req, res) => {
+  try {
+    const { bookingId, status } = req.body;
+    
+    const booking = await Booking.findById(bookingId).populate('rideId');
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+    
+    if (booking.rideId.providerId.toString() !== req.user.userId) {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+    
+    booking.status = status;
+    await booking.save();
+    
+    if (status === 'rejected') {
+      const ride = await Ride.findById(booking.rideId);
+      ride.seatsAvailable += 1;
+      await ride.save();
+    }
+    
+    res.json(booking);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /booking/my - THIS IS THE KEY ROUTE!
+app.get('/booking/my', auth, async (req, res) => {
+  try {
+    console.log('✅ HIT /booking/my for user:', req.user.userId);
+    const bookings = await Booking.find({ seekerId: req.user.userId })
+      .populate('rideId', 'pickup drop date time costPerSeat status')
+      .populate('rideId.providerId', 'name phone')
+      .sort({ createdAt: -1 });
+    res.json(bookings);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /booking/requests - for provider
+app.get('/booking/requests', auth, async (req, res) => {
+  try {
+    const rides = await Ride.find({ providerId: req.user.userId });
+    const rideIds = rides.map(r => r._id);
+    
+    const bookings = await Booking.find({ rideId: { $in: rideIds } })
+      .populate('rideId', 'pickup drop date time')
+      .populate('seekerId', 'name phone rating college')
+      .sort({ createdAt: -1 });
+    
+    res.json(bookings);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// GET /booking/ride/:rideId - THIS IS THE KEY ROUTE!
+app.get('/booking/ride/:rideId', auth, async (req, res) => {
+  try {
+    console.log('✅ HIT /booking/ride/:rideId for ride:', req.params.rideId);
+    const { rideId } = req.params;
+    
+    const ride = await Ride.findOne({ _id: rideId, providerId: req.user.userId });
+    if (!ride) return res.status(403).json({ message: 'Not authorized' });
+    
+    const bookings = await Booking.find({ rideId })
+      .populate('seekerId', 'name phone rating college')
+      .sort({ createdAt: -1 });
+    
+    res.json(bookings);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// --- TRACKING ROUTES ---
+const trackingRoutes = require('./tracking/tracking.routes');
 app.use('/tracking', trackingRoutes);
+
+// --- ADMIN ROUTES ---
 app.use('/admin', require('./admin/admin.routes'));
 
 // 404 Handler
@@ -113,19 +385,5 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
-
-// DEBUG: Test if routes are working
-app.get('/test/routes', (req, res) => {
-  res.json({
-    message: 'Routes test',
-    routes: [
-      'GET /ride/my',
-      'GET /booking/my', 
-      'GET /booking/ride/:rideId',
-      'POST /booking/request',
-      'GET /ride/search'
-    ]
-  });
+  console.log(`🚀 Server running on port ${PORT}`);
 });
