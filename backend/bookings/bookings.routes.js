@@ -9,13 +9,13 @@ router.post('/request', auth, controller.requestBooking);
 // PUT /booking/respond  
 router.put('/respond', auth, controller.respondBooking);
 
-// GET /booking/my - This matches frontend expectation!
+// GET /booking/my - For seeker to see their bookings
 router.get('/my', auth, controller.getMyBookings);
 
-// GET /booking/requests - for provider to see all requests
+// GET /booking/requests - For provider to see all requests
 router.get('/requests', auth, controller.getRideRequests);
 
-// GET /booking/ride/:rideId - This matches frontend expectation!
+// GET /booking/ride/:rideId - For provider to see bookings for specific ride
 router.get('/ride/:rideId', auth, controller.getBookingsForRide);
 
 module.exports = router;

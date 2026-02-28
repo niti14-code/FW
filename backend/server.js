@@ -49,7 +49,7 @@ app.use(express.urlencoded({ extended: true }));
 // ==========================================
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`);
-  console.log('Body:', req.body);  // Now this will show the body
+  console.log('Body:', req.body);
   next();
 });
 console.log('🔌 MongoDB URI:', process.env.MONGODB_URI ? 'Set (hidden)' : 'NOT SET!');
@@ -91,13 +91,13 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected' });
 });
 
-// API Routes
-app.use('/api/auth', require('./auth/auth.routes'));
-app.use('/api/users', require('./users/users.routes'));
-app.use('/api/rides', require('./rides/rides.routes'));
-app.use('/api/bookings', require('./bookings/bookings.routes'));
-app.use('/api/tracking', trackingRoutes);
-app.use('/api/admin', require('./admin/admin.routes'));
+// API Routes - NO /api prefix, use singular paths
+app.use('/auth', require('./auth/auth.routes'));
+app.use('/users', require('./users/users.routes'));
+app.use('/ride', require('./rides/rides.routes'));
+app.use('/booking', require('./bookings/bookings.routes'));
+app.use('/tracking', trackingRoutes);
+app.use('/admin', require('./admin/admin.routes'));
 
 // 404 Handler
 app.use((req, res) => {
@@ -114,24 +114,4 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
-
-// DEBUG ROUTE - List all users (remove in production!)
-app.get('/debug/users', async (req, res) => {
-  try {
-    const User = require('./users/users.model');
-    const users = await User.find().select('-password');
-    res.json({
-      count: users.length,
-      users: users.map(u => ({
-        id: u._id,
-        email: u.email,
-        name: u.name,
-        role: u.role,
-        createdAt: u.createdAt
-      }))
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
 });

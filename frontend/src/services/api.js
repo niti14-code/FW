@@ -3,7 +3,7 @@
 //  Base URL: https://freewheel-fykp.onrender.com
 // ══════════════════════════════════════════════════════════════════
 
-const BASE = 'https://freewheel-fykp.onrender.com/api';
+const BASE = 'https://freewheel-fykp.onrender.com';
 
 // ── Token / User helpers ──────────────────────────────────────────
 export const getToken   = ()  => localStorage.getItem('cr_token');
