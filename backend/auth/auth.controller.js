@@ -14,7 +14,12 @@ const register = async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, salt);
     
     user = new User({
-      name, email, password: hashedPassword, phone, role, college
+      name, 
+      email, 
+      password: hashedPassword, 
+      phone, 
+      role, 
+      college: role === 'admin' ? undefined : college
     });
     
     await user.save();
@@ -25,9 +30,17 @@ const register = async (req, res) => {
       { expiresIn: '7d' }
     );
     
+    // Return complete user object
     res.status(201).json({
       token,
-      user: { id: user._id, name, email, role, college }
+      user: { 
+        id: user._id, 
+        name: user.name, 
+        email: user.email, 
+        role: user.role, 
+        college: user.college,
+        phone: user.phone
+      }
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -52,15 +65,16 @@ const login = async (req, res) => {
     );
     
     res.json({
-  token,
-  user: { 
-    id: user._id, 
-    name: user.name,    
-    email: user.email,  
-    role: user.role,     
-    college: user.college 
-  }
-});
+      token,
+      user: { 
+        id: user._id, 
+        name: user.name,    
+        email: user.email,  
+        role: user.role,     
+        college: user.college,
+        phone: user.phone
+      }
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -75,7 +89,6 @@ const getMe = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-
 
 module.exports = {
   register,

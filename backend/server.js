@@ -70,13 +70,21 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected' });
 });
 
-// API Routes
+/*API Routes
 app.use('/api/auth', require('./auth/auth.routes'));
 app.use('/api/users', require('./users/users.routes'));
 app.use('/api/rides', require('./rides/rides.routes'));
 app.use('/api/bookings', require('./bookings/bookings.routes'));
 app.use('/api/tracking', trackingRoutes);
-app.use('/api/admin', require('./admin/admin.routes'));
+app.use('/api/admin', require('./admin/admin.routes'));*/
+
+// With these (no /api prefix):
+app.use('/auth', require('./auth/auth.routes'));
+app.use('/users', require('./users/users.routes'));
+app.use('/rides', require('./rides/rides.routes'));
+app.use('/booking', require('./bookings/bookings.routes'));  // Note: singular 'booking' to match frontend
+app.use('/tracking', trackingRoutes);
+app.use('/admin', require('./admin/admin.routes'));
 
 // 404 Handler
 app.use((req, res) => {

@@ -49,7 +49,8 @@ exports.respondBooking = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
-// Get my bookings (for seeker)
+
+// Get my bookings (for seeker) - KEEP ONLY THIS ONE
 exports.getMyBookings = async (req, res) => {
   try {
     const bookings = await Booking.find({ seekerId: req.user.userId })
@@ -74,20 +75,6 @@ exports.getRideRequests = async (req, res) => {
     const bookings = await Booking.find({ rideId: { $in: rideIds } })
       .populate('rideId', 'pickup drop date time')
       .populate('seekerId', 'name phone rating college')
-      .sort({ createdAt: -1 });
-    
-    res.json(bookings);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-
-exports.getMyBookings = async (req, res) => {
-  try {
-    const bookings = await Booking.find({ seekerId: req.user.userId })
-      .populate('rideId', 'pickup drop date time costPerSeat status')
-      .populate('rideId.providerId', 'name phone')
       .sort({ createdAt: -1 });
     
     res.json(bookings);
