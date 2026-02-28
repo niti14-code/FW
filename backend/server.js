@@ -52,6 +52,12 @@ app.use((req, res, next) => {
   console.log('Body:', req.body);  // Now this will show the body
   next();
 });
+console.log('🔌 MongoDB URI:', process.env.MONGODB_URI ? 'Set (hidden)' : 'NOT SET!');
+console.log('🗄️  Database name:', mongoose.connection.name || 'Not connected yet');
+
+mongoose.connection.on('connected', () => {
+  console.log('✅ MongoDB connected to:', mongoose.connection.name);
+});
 
 // ==========================================
 // 4. SOCKET.IO
@@ -108,4 +114,24 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
+});
+
+// DEBUG ROUTE - List all users (remove in production!)
+app.get('/debug/users', async (req, res) => {
+  try {
+    const User = require('./users/users.model');
+    const users = await User.find().select('-password');
+    res.json({
+      count: users.length,
+      users: users.map(u => ({
+        id: u._id,
+        email: u.email,
+        name: u.name,
+        role: u.role,
+        createdAt: u.createdAt
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
