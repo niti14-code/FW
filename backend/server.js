@@ -115,3 +115,17 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
+
+// DEBUG: Test if routes are working
+app.get('/test/routes', (req, res) => {
+  res.json({
+    message: 'Routes test',
+    routes: [
+      'GET /ride/my',
+      'GET /booking/my', 
+      'GET /booking/ride/:rideId',
+      'POST /booking/request',
+      'GET /ride/search'
+    ]
+  });
+});
