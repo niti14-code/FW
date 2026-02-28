@@ -52,12 +52,6 @@ export default function ProviderBookings({ navigate }) {
       <h1 className="heading mb-8" style={{fontSize:30}}>Manage Booking Requests</h1>
       <p className="text-muted mb-24 text-sm">Accept or reject incoming requests for your posted rides.</p>
 
-      {/* Backend note */}
-      <div className="alert alert-info mb-24">
-        This page requires <code>GET /booking/ride/:rideId</code> and <code>GET /ride/my</code>.
-        Add them using the snippets in <strong>README.md</strong>.
-      </div>
-
       {error && <div className="alert alert-error mb-16">{error}</div>}
 
       <div className="pb-layout">

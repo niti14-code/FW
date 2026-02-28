@@ -22,12 +22,6 @@ export default function MyBookings({ navigate }) {
       <h1 className="heading mb-8" style={{fontSize:30}}>My Bookings</h1>
       <p className="text-muted mb-24 text-sm">All your ride booking requests and their current status.</p>
 
-      {/* Backend note */}
-      <div className="alert alert-info mb-24">
-        This page requires <code>GET /booking/my</code> on the backend.
-        Add it using the snippet in <strong>README.md</strong> (included in the project).
-      </div>
-
       {loading && (
         <div className="sk-list">
           {[1,2,3].map(i => <div key={i} className="skeleton" style={{height:120, borderRadius:16}} />)}
