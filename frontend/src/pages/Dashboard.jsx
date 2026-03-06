@@ -14,6 +14,11 @@ export default function Dashboard({ navigate }) {
     { key:'create-ride',       icon:'🚗', title:'Offer a Ride',     sub:'Post your route and earn from seats',    primary: false, show: isProvider },
     { key:'my-bookings',       icon:'📋', title:'My Bookings',      sub:'View upcoming and past ride requests',   primary: false, show: isSeeker || isProvider },
     { key:'provider-bookings', icon:'📬', title:'Manage Requests',  sub:'Accept or reject incoming bookings',     primary: false, show: isProvider },
+    { key:'kyc',               icon:'🪪', title:'KYC Verification',  sub:'Upload ID and get verified',             primary: false, show: true },
+    { key:'ratings',           icon:'⭐', title:'Ratings',           sub:'View and give ride reviews',             primary: false, show: true },
+    { key:'live-tracking',     icon:'📍', title:'Live Tracking',     sub:'Track ride with emergency SOS',          primary: false, show: true },
+    { key:'community',         icon:'💬', title:'Community',         sub:'Tips, landmarks and alerts',             primary: false, show: true },
+    { key:'admin',             icon:'⚙️',  title:'Admin Dashboard',   sub:'Manage users, KYC and incidents',        primary: false, show: true },
   ].filter(a => a.show);
 
   return (
