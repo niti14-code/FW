@@ -6,6 +6,7 @@ const connectDB = require('./config/db');
 const http = require("http");
 const socketIo = require("socket.io");
 
+
 dotenv.config();
 connectDB();
 
@@ -61,9 +62,38 @@ app.set("io", io);
 
 io.on("connection", (socket) => {
   console.log("User Connected:", socket.id);
+
   socket.on("join-ride", (rideId) => {
     socket.join(`ride-${rideId}`);
   });
+
+  // CHAT MESSAGE EVENT
+  socket.on("send-message", async (data) => {
+    try {
+      const Chat = require('./chat/chat.model');
+
+      const { rideId, senderId, message } = data;
+
+      const chat = new Chat({
+        rideId,
+        sender: senderId,
+        message
+      });
+
+      await chat.save();
+
+      io.to(`ride-${rideId}`).emit("receive-message", {
+        rideId,
+        senderId,
+        message,
+        createdAt: chat.createdAt
+      });
+
+    } catch (error) {
+      console.error("Chat error:", error.message);
+    }
+  });
+
   socket.on("disconnect", () => {
     console.log("User Disconnected:", socket.id);
   });
@@ -364,9 +394,21 @@ app.get('/booking/ride/:rideId', auth, async (req, res) => {
   }
 });
 
+// --- RATINGS ROUTES ---
+const ratingsRoutes = require('./ratings/ratings.routes');
+app.use('/ratings', ratingsRoutes);
+
+// --- KYC ROUTES ---
+const kycRoutes = require('./kyc/kyc.routes');
+app.use('/kyc', kycRoutes);
+
 // --- TRACKING ROUTES ---
 const trackingRoutes = require('./tracking/tracking.routes');
 app.use('/tracking', trackingRoutes);
+
+// --- CHAT ROUTES ---
+const chatRoutes = require('./chat/chat.routes');
+app.use('/chat', chatRoutes);
 
 // --- ADMIN ROUTES ---
 app.use('/admin', require('./admin/admin.routes'));
