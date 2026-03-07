@@ -5,10 +5,6 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const http = require("http");
 const socketIo = require("socket.io");
-// Add these with your other requires at the top
-const alertsRoutes = require('./alerts/alerts.routes');
-const sosRoutes = require('./sos/sos.routes');
-
 
 dotenv.config();
 connectDB();
@@ -103,7 +99,7 @@ io.on("connection", (socket) => {
 });
 
 // ==========================================
-// 5. ROUTES - EXPLICIT MOUNTING
+// 5. ROUTES - MODULAR ARCHITECTURE
 // ==========================================
 
 app.get('/', (req, res) => {
@@ -117,7 +113,7 @@ app.get('/health', (req, res) => {
 // Import auth middleware
 const auth = require('./middleware/auth');
 
-// Import models
+// Import models (for auth routes)
 const User = require('./users/users.model');
 const Ride = require('./rides/rides.model');
 const Booking = require('./bookings/bookings.model');
@@ -206,220 +202,25 @@ app.put('/users/profile', auth, async (req, res) => {
   }
 });
 
-// --- RIDE ROUTES ---
-app.post('/ride/create', auth, async (req, res) => {
-  try {
-    const { pickup, drop, date, time, seatsAvailable, costPerSeat } = req.body;
-    
-    const user = await User.findById(req.user.userId);
-    if (user.role === 'seeker') return res.status(403).json({ message: 'Only providers can create rides' });
-    
-    const ride = new Ride({
-      providerId: req.user.userId,
-      pickup: { type: 'Point', coordinates: pickup.coordinates },
-      drop: { type: 'Point', coordinates: drop.coordinates },
-      date, time, seatsAvailable, costPerSeat
-    });
-    
-    await ride.save();
-    res.status(201).json(ride);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-app.get('/ride/search', auth, async (req, res) => {
-  try {
-    const { lat, lng, maxDistance = 5000, date } = req.query;
-    
-    const query = {
-      pickup: {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
-          $maxDistance: parseInt(maxDistance)
-        }
-      },
-      status: 'active',
-      seatsAvailable: { $gt: 0 }
-    };
-    
-    if (date) {
-      const searchDate = new Date(date);
-      query.date = { $gte: searchDate, $lt: new Date(searchDate.getTime() + 86400000) };
-    }
-    
-    const rides = await Ride.find(query).populate('providerId', 'name rating');
-    res.json(rides);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// GET /ride/my - THIS IS THE KEY ROUTE!
-app.get('/ride/my', auth, async (req, res) => {
-  try {
-    console.log('✅ HIT /ride/my for user:', req.user.userId);
-    const rides = await Ride.find({ providerId: req.user.userId }).sort({ createdAt: -1 });
-    res.json(rides);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-app.get('/ride/:id', auth, async (req, res) => {
-  try {
-    const ride = await Ride.findById(req.params.id).populate('providerId', 'name phone rating');
-    if (!ride) return res.status(404).json({ message: 'Ride not found' });
-    res.json(ride);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-app.put('/ride/:id', auth, async (req, res) => {
-  try {
-    const ride = await Ride.findOne({ _id: req.params.id, providerId: req.user.userId });
-    if (!ride) return res.status(404).json({ message: 'Ride not found' });
-    
-    const updated = await Ride.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-app.delete('/ride/:id', auth, async (req, res) => {
-  try {
-    const ride = await Ride.findOneAndDelete({ _id: req.params.id, providerId: req.user.userId });
-    if (!ride) return res.status(404).json({ message: 'Ride not found' });
-    res.json({ message: 'Ride deleted' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// --- BOOKING ROUTES ---
-app.post('/booking/request', auth, async (req, res) => {
-  try {
-    const { rideId } = req.body;
-    
-    const user = await User.findById(req.user.userId);
-    if (user.role === 'provider') return res.status(403).json({ message: 'Providers cannot book' });
-    
-    const ride = await Ride.findById(rideId);
-    if (!ride || ride.seatsAvailable < 1) return res.status(400).json({ message: 'No seats available' });
-    
-    const booking = new Booking({ rideId, seekerId: req.user.userId });
-    await booking.save();
-    
-    ride.seatsAvailable -= 1;
-    await ride.save();
-    
-    res.status(201).json(booking);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-app.put('/booking/respond', auth, async (req, res) => {
-  try {
-    const { bookingId, status } = req.body;
-    
-    const booking = await Booking.findById(bookingId).populate('rideId');
-    if (!booking) return res.status(404).json({ message: 'Booking not found' });
-    
-    if (booking.rideId.providerId.toString() !== req.user.userId) {
-      return res.status(403).json({ message: 'Not authorized' });
-    }
-    
-    booking.status = status;
-    await booking.save();
-    
-    if (status === 'rejected') {
-      const ride = await Ride.findById(booking.rideId);
-      ride.seatsAvailable += 1;
-      await ride.save();
-    }
-    
-    res.json(booking);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// GET /booking/my - THIS IS THE KEY ROUTE!
-app.get('/booking/my', auth, async (req, res) => {
-  try {
-    console.log('✅ HIT /booking/my for user:', req.user.userId);
-    const bookings = await Booking.find({ seekerId: req.user.userId })
-      .populate('rideId', 'pickup drop date time costPerSeat status')
-      .populate('rideId.providerId', 'name phone')
-      .sort({ createdAt: -1 });
-    res.json(bookings);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// GET /booking/requests - for provider
-app.get('/booking/requests', auth, async (req, res) => {
-  try {
-    const rides = await Ride.find({ providerId: req.user.userId });
-    const rideIds = rides.map(r => r._id);
-    
-    const bookings = await Booking.find({ rideId: { $in: rideIds } })
-      .populate('rideId', 'pickup drop date time')
-      .populate('seekerId', 'name phone rating college')
-      .sort({ createdAt: -1 });
-    
-    res.json(bookings);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// GET /booking/ride/:rideId - THIS IS THE KEY ROUTE!
-app.get('/booking/ride/:rideId', auth, async (req, res) => {
-  try {
-    console.log('✅ HIT /booking/ride/:rideId for ride:', req.params.rideId);
-    const { rideId } = req.params;
-    
-    const ride = await Ride.findOne({ _id: rideId, providerId: req.user.userId });
-    if (!ride) return res.status(403).json({ message: 'Not authorized' });
-    
-    const bookings = await Booking.find({ rideId })
-      .populate('seekerId', 'name phone rating college')
-      .sort({ createdAt: -1 });
-    
-    res.json(bookings);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// --- RATINGS ROUTES ---
+// --- MODULAR FEATURE ROUTES ---
+const ridesRoutes = require('./rides/rides.routes');
+const bookingsRoutes = require('./bookings/bookings.routes');
 const ratingsRoutes = require('./ratings/ratings.routes');
-app.use('/ratings', ratingsRoutes);
-
-// --- KYC ROUTES ---
 const kycRoutes = require('./kyc/kyc.routes');
-app.use('/kyc', kycRoutes);
-
-// --- TRACKING ROUTES ---
 const trackingRoutes = require('./tracking/tracking.routes');
-app.use('/tracking', trackingRoutes);
-
-// --- CHAT ROUTES ---
 const chatRoutes = require('./chat/chat.routes');
+const adminRoutes = require('./admin/admin.routes');
+const alertsRoutes = require('./alerts/alerts.routes');
+const sosRoutes = require('./sos/sos.routes');
+
+app.use('/ride', ridesRoutes);
+app.use('/booking', bookingsRoutes);
+app.use('/ratings', ratingsRoutes);
+app.use('/kyc', kycRoutes);
+app.use('/tracking', trackingRoutes);
 app.use('/chat', chatRoutes);
-
-// --- ADMIN ROUTES ---
-app.use('/admin', require('./admin/admin.routes'));
-
-// --- ALERTS ROUTES ---
+app.use('/admin', adminRoutes);
 app.use('/alerts', alertsRoutes);
-
-// --- SOS ROUTES ---
 app.use('/sos', sosRoutes);
 
 // 404 Handler
