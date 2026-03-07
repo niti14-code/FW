@@ -16,17 +16,17 @@ const rideSchema = new mongoose.Schema({
   costPerSeat: { type: Number, required: true },
   status: { type: String, enum: ['active', 'completed', 'cancelled', 'in-progress'], default: 'active' },
   
-  // RECURRING RIDES FIELDS
+  // RECURRING RIDES FIELDS - NO DEFAULTS HERE
   isRecurring: { type: Boolean, default: false },
   recurringPattern: {
     frequency: { type: String, enum: ['daily', 'weekly', 'weekdays', 'weekends', 'custom'], default: null },
-    daysOfWeek: [{ type: Number, min: 0, max: 6 }], // 0=Sunday, 6=Saturday
+    daysOfWeek: [{ type: Number, min: 0, max: 6 }],
     endDate: { type: Date },
-    occurrences: { type: Number }, // max number of occurrences
+    occurrences: { type: Number },
     currentOccurrence: { type: Number, default: 1 }
   },
-  parentRideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride', default: null }, // for child rides
-  recurringGroupId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride', default: null }, // groups all recurring instances
+  parentRideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride', default: null },
+  recurringGroupId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride', default: null },
   
 }, { timestamps: true });
 

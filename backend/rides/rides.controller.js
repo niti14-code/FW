@@ -91,20 +91,26 @@ exports.createRide = async (req, res) => {
     const user = await User.findById(req.user.userId);
     if (user.role === 'seeker') return res.status(403).json({ message: 'Only providers can create rides' });
     
+    // FIX: Properly check if recurring
+    const shouldRecur = isRecurring === true || isRecurring === 'true';
+    
     const ride = new Ride({
       providerId: req.user.userId,
       pickup: { type: 'Point', coordinates: pickup.coordinates },
       drop: { type: 'Point', coordinates: drop.coordinates },
-      date, time, seatsAvailable, costPerSeat,
-      isRecurring: isRecurring || false,
-      recurringPattern: isRecurring ? recurringPattern : null
+      date, 
+      time, 
+      seatsAvailable, 
+      costPerSeat,
+      isRecurring: shouldRecur,
+      recurringPattern: shouldRecur ? recurringPattern : null
     });
     
     await ride.save();
     
     // Generate recurring instances if enabled
     let childRides = [];
-    if (isRecurring && recurringPattern) {
+    if (shouldRecur && recurringPattern) {
       childRides = await generateRecurringRides(ride, recurringPattern);
     }
     
@@ -116,7 +122,7 @@ exports.createRide = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-};
+};   
 
 exports.searchRides = async (req, res) => {
   try {
