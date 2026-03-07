@@ -1,12 +1,21 @@
 const Tracking = require("./tracking.model");
+const Ride = require("../rides/rides.model");
 
 // UPDATE LOCATION
 const updateLocation = async (req, res) => {
   try {
     const { rideId, latitude, longitude } = req.body;
-    
-    // Get providerId from authenticated user (more secure)
     const providerId = req.user.userId;
+
+    // Verify ride is in progress
+    const ride = await Ride.findById(rideId);
+    if (!ride) {
+      return res.status(404).json({ error: "Ride not found" });
+    }
+    
+    if (ride.status !== 'in-progress') {
+      return res.status(400).json({ error: "Ride has not started yet" });
+    }
 
     let tracking = await Tracking.findOne({ rideId });
 
@@ -40,7 +49,7 @@ const updateLocation = async (req, res) => {
 
     const io = req.app.get("io");
     
-    // Emit to specific ride room (better than broadcasting to all)
+    // Emit to specific ride room
     io.to(`ride-${rideId}`).emit("locationUpdate", {
       rideId,
       latitude,
@@ -67,7 +76,13 @@ const getTracking = async (req, res) => {
       return res.status(404).json({ error: "Tracking not found" });
     }
 
-    res.json(tracking);
+    // Get ride status
+    const ride = await Ride.findById(req.params.rideId).select('status');
+    
+    res.json({
+      ...tracking.toObject(),
+      rideStatus: ride?.status
+    });
   } catch (error) {
     console.error("Get tracking error:", error);
     res.status(500).json({ error: error.message });
@@ -82,7 +97,7 @@ const endRide = async (req, res) => {
 
     const tracking = await Tracking.findOne({
       rideId,
-      providerId // Ensure provider can only end their own rides
+      providerId
     });
 
     if (!tracking) {
@@ -93,7 +108,6 @@ const endRide = async (req, res) => {
     await tracking.save();
 
     const io = req.app.get("io");
-    
     io.to(`ride-${rideId}`).emit("rideEnded", {
       rideId: tracking.rideId
     });

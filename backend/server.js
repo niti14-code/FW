@@ -5,6 +5,9 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const http = require("http");
 const socketIo = require("socket.io");
+// Add these with your other requires at the top
+const alertsRoutes = require('./alerts/alerts.routes');
+const sosRoutes = require('./sos/sos.routes');
 
 
 dotenv.config();
@@ -412,6 +415,12 @@ app.use('/chat', chatRoutes);
 
 // --- ADMIN ROUTES ---
 app.use('/admin', require('./admin/admin.routes'));
+
+// --- ALERTS ROUTES ---
+app.use('/alerts', alertsRoutes);
+
+// --- SOS ROUTES ---
+app.use('/sos', sosRoutes);
 
 // 404 Handler
 app.use((req, res) => {

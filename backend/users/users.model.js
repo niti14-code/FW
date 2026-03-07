@@ -22,7 +22,12 @@ const userSchema = new mongoose.Schema({
     email: { type: Boolean, default: false },
     studentId: { type: Boolean, default: false },
     license: { type: Boolean, default: false }
-  }
+  },
+  emergencyContacts: [{
+  name: { type: String },
+  phone: { type: String },
+  relation: { type: String }
+}]
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', userSchema);
