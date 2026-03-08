@@ -83,41 +83,82 @@ exports.deleteAlert = async (req, res) => {
 };
 
 // Check for matches (internal function)
+// Check for matches (internal function) - FIXED
 const checkForMatches = async (alert) => {
-  const query = {
-    status: 'active',
-    seatsAvailable: { $gt: 0 },
-    pickup: {
-      $near: {
-        $geometry: alert.pickup,
-        $maxDistance: alert.pickupRadius
+  try {
+    // Use $geoNear for pickup (primary) and $geoWithin for drop (secondary)
+    // OR use $and with distance calculation
+    
+    // Option 1: Use pickup as primary geo search, filter drop by manual distance
+    const query = {
+      status: 'active',
+      seatsAvailable: { $gt: 0 },
+      pickup: {
+        $near: {
+          $geometry: alert.pickup,
+          $maxDistance: alert.pickupRadius
+        }
       }
-    },
-    drop: {
-      $near: {
-        $geometry: alert.drop,
-        $maxDistance: alert.dropRadius
-      }
-    }
-  };
-  
-  // Date filter
-  if (alert.date) {
-    const searchDate = new Date(alert.date);
-    query.date = { 
-      $gte: searchDate, 
-      $lt: new Date(searchDate.getTime() + 86400000) 
     };
-  } else {
-    // Future rides only
-    query.date = { $gte: new Date() };
+    
+    // Date filter
+    if (alert.date) {
+      const searchDate = new Date(alert.date);
+      query.date = { 
+        $gte: searchDate, 
+        $lt: new Date(searchDate.getTime() + 86400000) 
+      };
+    } else {
+      query.date = { $gte: new Date() };
+    }
+    
+    // First get rides near pickup
+    let rides = await Ride.find(query)
+      .populate('providerId', 'name rating')
+      .limit(50);
+    
+    // Manually filter by drop distance (since we can't use two $near)
+    rides = rides.filter(ride => {
+      if (!ride.drop || !ride.drop.coordinates) return false;
+      
+      const dropLng = ride.drop.coordinates[0];
+      const dropLat = ride.drop.coordinates[1];
+      const alertDropLng = alert.drop.coordinates[0];
+      const alertDropLat = alert.drop.coordinates[1];
+      
+      // Calculate distance using Haversine formula
+      const distance = calculateDistance(dropLat, dropLng, alertDropLat, alertDropLng);
+      return distance <= alert.dropRadius;
+    });
+    
+    // Time range filter if specified
+    if (alert.timeRange && alert.timeRange.start && alert.timeRange.end) {
+      rides = rides.filter(ride => {
+        return ride.time >= alert.timeRange.start && ride.time <= alert.timeRange.end;
+      });
+    }
+    
+    return rides;
+  } catch (error) {
+    console.error('Error in checkForMatches:', error);
+    throw error;
   }
-  
-  const matches = await Ride.find(query)
-    .populate('providerId', 'name rating')
-    .limit(10);
-  
-  return matches;
+};
+
+// Helper: Calculate distance between two points in meters (Haversine formula)
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c; // Distance in meters
 };
 
 // Manual check for matches
