@@ -27,9 +27,9 @@
 .da-card.primary:hover { border-color: var(--accent); }
 .da-icon { font-size: 26px; flex-shrink: 0; }
 .da-body { flex: 1; }
-.da-title { font-family: var(--font-display); font-size: 14.5px; font-weight: 700; margin-bottom: 4px; }
+.da-title { font-family: var(--font-display); font-size: 14.5px; font-weight: 700; margin-bottom: 4px; color: var(--text); }
 .da-sub   { font-size: 12px; color: var(--text2); line-height: 1.5; }
-.da-arrow { color: var(--text3); font-size: 16px; transition: transform 0.2s, color 0.2s; }
+.da-arrow { color: var(--text2); font-size: 16px; transition: transform 0.2s, color 0.2s; }
 .da-card:hover .da-arrow { transform: translateX(4px); color: var(--accent); }
 
 /* Feature pills */
