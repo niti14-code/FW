@@ -1,15 +1,29 @@
 const Ride = require('./rides.model');
 const User = require('../users/users.model');
+const Booking = require('../bookings/bookings.model');
+const Tracking = require('../tracking/tracking.model');
 
 // Helper: Generate recurring ride instances
 const generateRecurringRides = async (baseRide, pattern) => {
+  // Validation
+  if (!pattern || !pattern.frequency) {
+    console.log('No recurring pattern provided, skipping recurring generation');
+    return [];
+  }
+  
   const rides = [];
   const startDate = new Date(baseRide.date);
   let currentDate = new Date(startDate);
   let occurrence = 1;
   
-  const maxOccurrences = pattern.occurrences || 30; // default max
-  const endDate = pattern.endDate || new Date(currentDate.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days default
+  const maxOccurrences = pattern.occurrences || 30;
+  const endDate = pattern.endDate || new Date(currentDate.getTime() + 90 * 24 * 60 * 60 * 1000);
+  
+  // Safety check for valid dates
+  if (isNaN(endDate.getTime())) {
+    console.error('Invalid end date in recurring pattern');
+    return [];
+  }
   
   const recurringGroupId = baseRide._id;
   
@@ -143,7 +157,7 @@ exports.searchRides = async (req, res) => {
     if (includeRecurring !== 'true') {
       query.$or = [
         { isRecurring: false },
-        { isRecurring: true, parentRideId: null } // only parent recurring rides
+        { isRecurring: true, parentRideId: null }
       ];
     }
     
@@ -290,7 +304,6 @@ exports.startRide = async (req, res) => {
     }
     
     // Check if there are accepted bookings
-    const Booking = require('../bookings/bookings.model');
     const acceptedBookings = await Booking.countDocuments({
       rideId: ride._id,
       status: 'accepted'
@@ -376,7 +389,6 @@ exports.cancelRide = async (req, res) => {
     await ride.save();
     
     // Refund seats to all pending/accepted bookings
-    const Booking = require('../bookings/bookings.model');
     const bookings = await Booking.find({ 
       rideId: ride._id,
       status: { $in: ['pending', 'accepted'] }
@@ -385,9 +397,6 @@ exports.cancelRide = async (req, res) => {
     for (const booking of bookings) {
       booking.status = 'cancelled';
       await booking.save();
-      
-      // Notify seeker
-      // TODO: Send notification
     }
     
     // Notify via socket
@@ -415,12 +424,10 @@ exports.getRideStatus = async (req, res) => {
     if (!ride) return res.status(404).json({ message: 'Ride not found' });
     
     // Get all bookings
-    const Booking = require('../bookings/bookings.model');
     const bookings = await Booking.find({ rideId })
       .populate('seekerId', 'name phone rating');
     
     // Get tracking if active
-    const Tracking = require('../tracking/tracking.model');
     const tracking = await Tracking.findOne({ rideId });
     
     res.json({

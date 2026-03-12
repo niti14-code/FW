@@ -14,6 +14,9 @@ import AdminDashboard   from "./pages/AdminDashboard.jsx";
 import RatingsPage      from "./pages/RatingsPage.jsx";
 import LiveTracking     from "./pages/LiveTracking.jsx";
 import CommunityPage    from "./pages/CommunityPage.jsx";
+import RouteAlerts      from "./pages/RouteAlerts.jsx";
+import IncidentReport   from "./pages/IncidentReport.jsx";
+import AdminSettings    from "./pages/AdminSettings.jsx";
 
 const PAGE_MAP = {
   login:               LoginPage,
@@ -29,7 +32,11 @@ const PAGE_MAP = {
   "ratings":           RatingsPage,
   "live-tracking":     LiveTracking,
   "community":         CommunityPage,
+  "route-alerts":      RouteAlerts,
+  "incident-report":   IncidentReport,
+  "admin-settings":    AdminSettings,
 };
+
 const PUBLIC_PAGES = ["login", "register"];
 
 function Router() {

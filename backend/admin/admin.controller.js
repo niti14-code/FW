@@ -1,8 +1,9 @@
 const User = require('../users/users.model');
 const Ride = require('../rides/rides.model');
 const Booking = require('../bookings/bookings.model');
-const Tracking = require('../tracking/tracking.model');
-const Admin = require('./admin.model'); // ADD THIS IMPORT
+const Admin = require('./admin.model');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 // ==========================================
 // DASHBOARD ANALYTICS
@@ -290,6 +291,7 @@ exports.getRideDetails = async (req, res) => {
       .populate('seekerId', 'name email phone');
     
     // Get tracking if active
+    const Tracking = require('../tracking/tracking.model');
     const tracking = await Tracking.findOne({ rideId: ride._id });
     
     res.json({
@@ -478,7 +480,6 @@ exports.registerAdmin = async (req, res) => {
     }
     
     // Create new admin user
-    const bcrypt = require('bcryptjs');
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
@@ -508,7 +509,6 @@ exports.registerAdmin = async (req, res) => {
     await admin.save();
     
     // Generate token
-    const jwt = require('jsonwebtoken');
     const token = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET,

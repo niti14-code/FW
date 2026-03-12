@@ -4,86 +4,127 @@ import './SharedPages.css';
 
 export default function MyBookings({ navigate }) {
   const [bookings, setBookings] = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     api.getMyBookings()
-      .then(setBookings)
-      .catch(e => setError(e.message))
+      .then(data => setBookings(data))
+      .catch(err => setError(err.message))
       .finally(() => setLoading(false));
   }, []);
 
-  const statusIcon = { pending:'⏳', accepted:'✅', rejected:'❌' };
+  const getStatusBadge = (status) => {
+    const statusMap = {
+      pending: { class: 'badge-pending', label: 'Pending' },
+      accepted: { class: 'badge-accepted', label: 'Accepted' },
+      rejected: { class: 'badge-rejected', label: 'Rejected' },
+      cancelled: { class: 'badge-rejected', label: 'Cancelled' }
+    };
+    return statusMap[status] || { class: 'badge-pending', label: status };
+  };
+
+  if (loading) return (
+    <div className="page-wrap fade-up">
+      <div className="sk-list">
+        {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 120, borderRadius: 14, marginBottom: 16 }} />)}
+      </div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="page-wrap fade-up">
+      <div className="alert alert-error">{error}</div>
+    </div>
+  );
 
   return (
     <div className="page-wrap fade-up">
       <p className="eyebrow mb-16">Seeker</p>
-      <h1 className="heading mb-8" style={{fontSize:30}}>My Bookings</h1>
-      <p className="text-muted mb-24 text-sm">All your ride booking requests and their current status.</p>
+      <h1 className="heading mb-8" style={{ fontSize: 30 }}>My Bookings</h1>
+      <p className="text-muted mb-24 text-sm">Track your ride requests and bookings</p>
 
-      {loading && (
-        <div className="sk-list">
-          {[1,2,3].map(i => <div key={i} className="skeleton" style={{height:120, borderRadius:16}} />)}
-        </div>
-      )}
-
-      {error && <div className="alert alert-error">{error}</div>}
-
-      {!loading && !error && bookings.length === 0 && (
+      {bookings.length === 0 ? (
         <div className="empty-state">
           <div className="empty-icon">📭</div>
           <div className="empty-title">No bookings yet</div>
-          <div className="empty-sub mt-8">Search for a ride and book a seat to get started.</div>
+          <div className="empty-sub mt-8">Find a ride and book your first trip!</div>
           <button className="btn btn-primary mt-24" onClick={() => navigate('search-rides')}>
-            Find a Ride →
+            Search Rides
           </button>
         </div>
-      )}
+      ) : (
+        <div className="bk-list">
+          {bookings.map(booking => {
+            const ride = booking.rideId;
+            const status = getStatusBadge(booking.status);
+            return (
+              <div key={booking._id} className="bk-card card">
+                <div className="card-body">
+                  <div className="flex-between mb-12">
+                    <span className={`badge ${status.class}`}>{status.label}</span>
+                    <span className="text-dim text-xs">
+                      {new Date(booking.createdAt).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </span>
+                  </div>
+                  
+                  {ride ? (
+                    <>
+                      <div className="rd-route mb-16">
+                        <div className="rd-stop">
+                          <div className="rd-dot green" />
+                          <div className="rd-loc text-sm">
+                            {ride.pickup?.coordinates ? 
+                              `${ride.pickup.coordinates[1].toFixed(4)}°N, ${ride.pickup.coordinates[0].toFixed(4)}°E` 
+                              : 'Pickup location'}
+                          </div>
+                        </div>
+                        <div className="rd-connector" />
+                        <div className="rd-stop">
+                          <div className="rd-dot red" />
+                          <div className="rd-loc text-sm">
+                            {ride.drop?.coordinates ? 
+                              `${ride.drop.coordinates[1].toFixed(4)}°N, ${ride.drop.coordinates[0].toFixed(4)}°E` 
+                              : 'Drop location'}
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="flex-between text-sm">
+                        <span className="text-dim">
+                          {new Date(ride.date).toLocaleDateString('en-IN', {
+                            weekday: 'short',
+                            day: 'numeric',
+                            month: 'short'
+                          })} · {ride.time}
+                        </span>
+                        <span className="text-accent font-600">₹{ride.costPerSeat}</span>
+                      </div>
 
-      <div className="bk-list">
-        {bookings.map(b => {
-          const ride = b.rideId;
-          if (!ride) return null;
-          const dateStr = new Date(ride.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
-          const pickup  = ride.pickupLabel || coordStr(ride.pickup?.coordinates);
-          const drop    = ride.dropLabel   || coordStr(ride.drop?.coordinates);
-          return (
-            <div key={b._id} className="bk-card card">
-              <div className="card-header">
-                <span className="card-title">Booking #{b._id.slice(-6).toUpperCase()}</span>
-                <span className={`badge badge-${b.status}`}>
-                  {statusIcon[b.status]} {b.status}
-                </span>
-              </div>
-              <div className="card-body">
-                <div className="bk-route mb-16">
-                  <div className="bk-stop"><span className="bk-dot green" /><span>{pickup}</span></div>
-                  <span className="bk-arr">→</span>
-                  <div className="bk-stop"><span className="bk-dot red" /><span>{drop}</span></div>
+                      {ride.providerId && (
+                        <div className="mt-12 pt-12" style={{ borderTop: '1px solid #333' }}>
+                          <div className="text-dim text-xs mb-4">Provider</div>
+                          <div className="flex-between">
+                            <span>{ride.providerId.name}</span>
+                            <span className="text-dim text-xs">📞 {ride.providerId.phone}</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-muted text-sm">Ride details unavailable</p>
+                  )}
                 </div>
-                <div className="grid-2">
-                  <div className="text-dim text-xs">DATE<div className="text-muted font-700 mt-4">{dateStr}</div></div>
-                  <div className="text-dim text-xs">TIME<div className="text-muted font-700 mt-4">{ride.time}</div></div>
-                  <div className="text-dim text-xs">COST<div className="text-accent font-700 mt-4">₹{ride.costPerSeat}/seat</div></div>
-                  <div className="text-dim text-xs">BOOKED ON<div className="text-muted font-700 mt-4">{new Date(b.createdAt).toLocaleDateString('en-IN')}</div></div>
-                </div>
-                {b.status === 'accepted' && (
-                  <div className="alert alert-success mt-16">
-                    ✅ Confirmed! Meet the provider at the pickup point.
-                  </div>
-                )}
-                {b.status === 'rejected' && (
-                  <div className="alert alert-error mt-16">
-                    This booking was rejected. Try searching for another ride.
-                  </div>
-                )}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
-function coordStr(c) { return c?.length ? `${c[1].toFixed(3)}°N, ${c[0].toFixed(3)}°E` : 'Location'; }
