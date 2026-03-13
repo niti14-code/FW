@@ -22,7 +22,22 @@ export default function IncidentReport({ navigate }) {
     if (!form.rideId || !form.description) return setError('Ride ID and description are required');
     setLoading(true);
     try {
-      const res = await api.reportIncident(form);
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+
+  const payload = {
+    ...form,
+    location: {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude
+    }
+  };
+
+  const res = await api.reportIncident(payload);
+
+  setIncidents(i => [res.incident, ...i]);
+  setSuccess('Incident reported successfully.');
+
+});
       setIncidents(i => [res.incident, ...i]);
       setSuccess('Incident reported successfully.');
       setForm({ rideId:'', type:'other', description:'', severity:'medium' });

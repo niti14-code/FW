@@ -2,8 +2,15 @@ const Incident = require('./incidents.model');
 
 exports.reportIncident = async (req, res) => {
   try {
-    const { rideId, type, description, severity } = req.body;
-    const incident = new Incident({ rideId, reportedBy: req.user.userId, type, description, severity });
+    const { rideId, type, description, severity, location } = req.body;
+    const incident = new Incident({
+  rideId,
+  reportedBy: req.user.userId,
+  type,
+  description,
+  severity,
+  location
+});
     await incident.save();
     res.status(201).json({ message: 'Incident reported', incident });
   } catch (err) { res.status(500).json({ message: err.message }); }
