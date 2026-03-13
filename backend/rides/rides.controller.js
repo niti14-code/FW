@@ -742,3 +742,8 @@ exports.noMatchSuggest = async (req, res) => {
     });
   } catch (err) { res.status(500).json({ message: err.message }); }
 };
+// ── GENERATE OTP (alias for requestOtpFromSeeker) ─────────────────
+exports.generateOtp = async (req, res) => {
+  // You can either call the existing function or implement new logic
+  return exports.requestOtpFromSeeker(req, res);
+};
