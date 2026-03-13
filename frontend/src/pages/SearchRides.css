@@ -1,5 +1,5 @@
 .search-grid {
-  display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
   gap: 14px; margin-bottom: 16px;
 }
 .search-actions {

@@ -16,13 +16,16 @@ const userSchema = new mongoose.Schema({
       return this.role !== 'admin'; 
     } 
   },
-  rating: { type: Number, default: 0 },
+  rating: { type: Number, default: 0, min: 0, max: 5 },
   totalRides: { type: Number, default: 0 },
-  verified: {
+  verified: { 
     email: { type: Boolean, default: false },
     studentId: { type: Boolean, default: false },
     license: { type: Boolean, default: false }
   },
+  // Permanent OTP for user (like Rapido/Uber/Ola)
+  permanentOtp: { type: String },
+  permanentOtpSetAt: { type: Date },
   emergencyContacts: [{
   name: { type: String },
   phone: { type: String },

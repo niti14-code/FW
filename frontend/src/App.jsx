@@ -36,7 +36,6 @@ const PAGE_MAP = {
   "incident-report":   IncidentReport,
   "admin-settings":    AdminSettings,
 };
-
 const PUBLIC_PAGES = ["login", "register"];
 
 function Router() {

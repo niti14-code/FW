@@ -1,9 +1,8 @@
 const User = require('../users/users.model');
 const Ride = require('../rides/rides.model');
 const Booking = require('../bookings/bookings.model');
-const Admin = require('./admin.model');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const Tracking = require('../tracking/tracking.model');
+const Admin = require('./admin.model'); // ADD THIS IMPORT
 
 // ==========================================
 // DASHBOARD ANALYTICS
@@ -291,7 +290,6 @@ exports.getRideDetails = async (req, res) => {
       .populate('seekerId', 'name email phone');
     
     // Get tracking if active
-    const Tracking = require('../tracking/tracking.model');
     const tracking = await Tracking.findOne({ rideId: ride._id });
     
     res.json({
@@ -480,6 +478,7 @@ exports.registerAdmin = async (req, res) => {
     }
     
     // Create new admin user
+    const bcrypt = require('bcryptjs');
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
     
@@ -509,6 +508,7 @@ exports.registerAdmin = async (req, res) => {
     await admin.save();
     
     // Generate token
+    const jwt = require('jsonwebtoken');
     const token = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET,
@@ -528,4 +528,27 @@ exports.registerAdmin = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+// ── ADMIN SETTINGS (key-value store) ──────────────────────────────
+const settingsStore = {}; // in-memory; replace with DB model if needed
+
+exports.getSetting = async (req, res) => {
+  try {
+    const { key } = req.params;
+    res.json({ key, value: settingsStore[key] ?? null });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+exports.setSetting = async (req, res) => {
+  try {
+    const { key, value } = req.body;
+    settingsStore[key] = value;
+    res.json({ key, value });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+exports.getAllSettings = async (req, res) => {
+  try {
+    res.json(settingsStore);
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };

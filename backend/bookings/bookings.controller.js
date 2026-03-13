@@ -7,7 +7,15 @@ exports.requestBooking = async (req, res) => {
     const { rideId } = req.body;
     
     const user = await User.findById(req.user.userId);
-    if (user.role === 'provider') return res.status(403).json({ message: 'Providers cannot book' });
+    
+    // Role validation: Only 'seeker' or 'both' can book rides
+    if (!user || (user.role !== 'seeker' && user.role !== 'both')) {
+      return res.status(403).json({ 
+        message: 'Access denied: Only seekers can book rides',
+        requiredRole: ['seeker', 'both'],
+        currentRole: user?.role || 'unknown'
+      });
+    }
     
     const ride = await Ride.findById(rideId);
     if (!ride || ride.seatsAvailable < 1) return res.status(400).json({ message: 'No seats available' });
@@ -53,6 +61,17 @@ exports.respondBooking = async (req, res) => {
 // Get my bookings (for seeker) - KEEP ONLY THIS ONE
 exports.getMyBookings = async (req, res) => {
   try {
+    const user = await User.findById(req.user.userId);
+    
+    // Role validation: Only 'seeker' or 'both' can view their bookings
+    if (!user || (user.role !== 'seeker' && user.role !== 'both')) {
+      return res.status(403).json({ 
+        message: 'Access denied: Only seekers can view their bookings',
+        requiredRole: ['seeker', 'both'],
+        currentRole: user?.role || 'unknown'
+      });
+    }
+    
     const bookings = await Booking.find({ seekerId: req.user.userId })
       .populate('rideId', 'pickup drop date time costPerSeat status')
       .populate('rideId.providerId', 'name phone')
@@ -67,6 +86,17 @@ exports.getMyBookings = async (req, res) => {
 // Get ride requests (for provider)
 exports.getRideRequests = async (req, res) => {
   try {
+    const user = await User.findById(req.user.userId);
+    
+    // Role validation: Only 'provider' or 'both' can view ride requests
+    if (!user || (user.role !== 'provider' && user.role !== 'both')) {
+      return res.status(403).json({ 
+        message: 'Access denied: Only providers can view ride requests',
+        requiredRole: ['provider', 'both'],
+        currentRole: user?.role || 'unknown'
+      });
+    }
+    
     // Get all rides by this provider
     const rides = await Ride.find({ providerId: req.user.userId });
     const rideIds = rides.map(r => r._id);

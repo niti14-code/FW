@@ -10,16 +10,19 @@ export default function Navbar({ navigate, currentPage }) {
 
   const isProvider = user?.role === 'provider' || user?.role === 'both';
   const isSeeker   = user?.role === 'seeker'   || user?.role === 'both';
+  const isAdmin    = user?.role === 'admin';
 
   const links = [
-    { key: 'dashboard',          label: 'Home',           icon: '⊞', show: true },
-    { key: 'search-rides',       label: 'Find a Ride',    icon: '🔍', show: true },
-    { key: 'create-ride',        label: 'Offer Ride',     icon: '＋', show: isProvider },
-    { key: 'my-bookings',        label: 'My Bookings',    icon: '📋', show: isSeeker || isProvider },
-    { key: 'provider-bookings',  label: 'Manage Requests',icon: '📬', show: isProvider },
+    { key: 'dashboard',          label: 'Home',            icon: '⊞', show: true },
+    { key: 'search-rides',       label: 'Find a Ride',     icon: '🔍', show: isSeeker },
+    { key: 'create-ride',        label: 'Offer Ride',      icon: '＋', show: isProvider },
+    { key: 'my-bookings',        label: 'My Bookings',     icon: '📋', show: isSeeker },
+    { key: 'provider-bookings',  label: 'Manage Requests', icon: '📬', show: isProvider },
+    { key: 'route-alerts',       label: 'Route Alerts',    icon: '🔔', show: true },
+    { key: 'incident-report',    label: 'Incidents',       icon: '⚠️', show: true },
+    { key: 'admin-settings',     label: 'Admin Settings',  icon: '⚙️', show: isAdmin },
   ].filter(l => l.show);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e) => { if (dropRef.current && !dropRef.current.contains(e.target)) setMenuOpen(false); };
     document.addEventListener('mousedown', handler);
@@ -27,20 +30,16 @@ export default function Navbar({ navigate, currentPage }) {
   }, []);
 
   const go = (key) => { navigate(key); setMobileOpen(false); setMenuOpen(false); };
-
   const handleLogout = () => { logout(); navigate('login'); };
 
   return (
     <>
       <nav className="navbar">
         <div className="nav-inner">
-
-          {/* Logo */}
           <button className="nav-logo" onClick={() => go('dashboard')}>
             Campus<span>Ride</span>
           </button>
 
-          {/* Desktop links */}
           <div className="nav-links">
             {links.map(l => (
               <button key={l.key} className={`nav-link ${currentPage === l.key ? 'active' : ''}`} onClick={() => go(l.key)}>
@@ -50,7 +49,6 @@ export default function Navbar({ navigate, currentPage }) {
             ))}
           </div>
 
-          {/* Right: user pill */}
           <div className="nav-right">
             <div className="user-pill" ref={dropRef} onClick={() => setMenuOpen(o => !o)}>
               <div className="user-ava">{user?.name?.charAt(0)?.toUpperCase()}</div>
@@ -77,7 +75,6 @@ export default function Navbar({ navigate, currentPage }) {
               )}
             </div>
 
-            {/* Mobile hamburger */}
             <button className="hamburger" onClick={() => setMobileOpen(o => !o)} aria-label="Menu">
               {mobileOpen
                 ? <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 4l12 12M16 4L4 16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>
@@ -88,7 +85,6 @@ export default function Navbar({ navigate, currentPage }) {
         </div>
       </nav>
 
-      {/* Mobile slide-down */}
       {mobileOpen && (
         <div className="mobile-menu fade-in">
           {links.map(l => (

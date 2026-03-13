@@ -1,29 +1,15 @@
 const Ride = require('./rides.model');
 const User = require('../users/users.model');
-const Booking = require('../bookings/bookings.model');
-const Tracking = require('../tracking/tracking.model');
 
 // Helper: Generate recurring ride instances
 const generateRecurringRides = async (baseRide, pattern) => {
-  // Validation
-  if (!pattern || !pattern.frequency) {
-    console.log('No recurring pattern provided, skipping recurring generation');
-    return [];
-  }
-  
   const rides = [];
   const startDate = new Date(baseRide.date);
   let currentDate = new Date(startDate);
   let occurrence = 1;
   
-  const maxOccurrences = pattern.occurrences || 30;
-  const endDate = pattern.endDate || new Date(currentDate.getTime() + 90 * 24 * 60 * 60 * 1000);
-  
-  // Safety check for valid dates
-  if (isNaN(endDate.getTime())) {
-    console.error('Invalid end date in recurring pattern');
-    return [];
-  }
+  const maxOccurrences = pattern.occurrences || 30; // default max
+  const endDate = pattern.endDate || new Date(currentDate.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days default
   
   const recurringGroupId = baseRide._id;
   
@@ -103,7 +89,15 @@ exports.createRide = async (req, res) => {
     const { pickup, drop, date, time, seatsAvailable, costPerSeat, isRecurring, recurringPattern } = req.body;
     
     const user = await User.findById(req.user.userId);
-    if (user.role === 'seeker') return res.status(403).json({ message: 'Only providers can create rides' });
+    
+    // Role validation: Only 'provider' or 'both' can create rides
+    if (!user || (user.role !== 'provider' && user.role !== 'both')) {
+      return res.status(403).json({ 
+        message: 'Access denied: Only providers can create rides',
+        requiredRole: ['provider', 'both'],
+        currentRole: user?.role || 'unknown'
+      });
+    }
     
     // FIX: Properly check if recurring
     const shouldRecur = isRecurring === true || isRecurring === 'true';
@@ -142,6 +136,17 @@ exports.searchRides = async (req, res) => {
   try {
     const { lat, lng, maxDistance = 5000, date, includeRecurring } = req.query;
     
+    const user = await User.findById(req.user.userId);
+    
+    // Role validation: Only 'seeker' or 'both' can search rides
+    if (!user || (user.role !== 'seeker' && user.role !== 'both')) {
+      return res.status(403).json({ 
+        message: 'Access denied: Only seekers can search rides',
+        requiredRole: ['seeker', 'both'],
+        currentRole: user?.role || 'unknown'
+      });
+    }
+    
     const query = {
       pickup: {
         $near: {
@@ -149,7 +154,7 @@ exports.searchRides = async (req, res) => {
           $maxDistance: parseInt(maxDistance)
         }
       },
-      status: 'active',
+      status: { $in: ['active', 'in-progress'] },
       seatsAvailable: { $gt: 0 }
     };
     
@@ -162,8 +167,11 @@ exports.searchRides = async (req, res) => {
     }
     
     if (date) {
+      // Search the full selected day regardless of time
       const searchDate = new Date(date);
-      query.date = { $gte: searchDate, $lt: new Date(searchDate.getTime() + 86400000) };
+      searchDate.setHours(0, 0, 0, 0);
+      const nextDay = new Date(searchDate.getTime() + 86400000);
+      query.date = { $gte: searchDate, $lt: nextDay };
     }
     
     const rides = await Ride.find(query).populate('providerId', 'name rating');
@@ -254,6 +262,17 @@ exports.getMyRides = async (req, res) => {
   try {
     const { includeRecurring } = req.query;
     
+    const user = await User.findById(req.user.userId);
+    
+    // Role validation: Only 'provider' or 'both' can view their posted rides
+    if (!user || (user.role !== 'provider' && user.role !== 'both')) {
+      return res.status(403).json({ 
+        message: 'Access denied: Only providers can view their posted rides',
+        requiredRole: ['provider', 'both'],
+        currentRole: user?.role || 'unknown'
+      });
+    }
+    
     let query = { providerId: req.user.userId };
     
     // Exclude child recurring rides by default
@@ -304,6 +323,7 @@ exports.startRide = async (req, res) => {
     }
     
     // Check if there are accepted bookings
+    const Booking = require('../bookings/bookings.model');
     const acceptedBookings = await Booking.countDocuments({
       rideId: ride._id,
       status: 'accepted'
@@ -311,6 +331,14 @@ exports.startRide = async (req, res) => {
     
     if (acceptedBookings === 0) {
       return res.status(400).json({ message: 'No accepted bookings for this ride' });
+    }
+    
+    // Require OTP verification before starting ride (seeker provides OTP to provider)
+    if (!ride.isOtpVerified) {
+      return res.status(400).json({ 
+        message: 'OTP verification required before starting ride. Please request OTP from passengers and verify it first.',
+        requiresOtp: true
+      });
     }
     
     ride.status = 'in-progress';
@@ -325,7 +353,7 @@ exports.startRide = async (req, res) => {
       startedAt: ride.startedAt
     });
     
-    res.json({ message: 'Ride started', ride });
+    res.json({ message: 'Ride started successfully', ride });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -389,6 +417,7 @@ exports.cancelRide = async (req, res) => {
     await ride.save();
     
     // Refund seats to all pending/accepted bookings
+    const Booking = require('../bookings/bookings.model');
     const bookings = await Booking.find({ 
       rideId: ride._id,
       status: { $in: ['pending', 'accepted'] }
@@ -397,6 +426,9 @@ exports.cancelRide = async (req, res) => {
     for (const booking of bookings) {
       booking.status = 'cancelled';
       await booking.save();
+      
+      // Notify seeker
+      // TODO: Send notification
     }
     
     // Notify via socket
@@ -424,10 +456,12 @@ exports.getRideStatus = async (req, res) => {
     if (!ride) return res.status(404).json({ message: 'Ride not found' });
     
     // Get all bookings
+    const Booking = require('../bookings/bookings.model');
     const bookings = await Booking.find({ rideId })
       .populate('seekerId', 'name phone rating');
     
     // Get tracking if active
+    const Tracking = require('../tracking/tracking.model');
     const tracking = await Tracking.findOne({ rideId });
     
     res.json({
@@ -451,4 +485,260 @@ exports.getRideStatus = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+// ── PRE-RIDE SAFETY CHECKLIST ──────────────────────────────────────
+exports.submitChecklist = async (req, res) => {
+  try {
+    const ride = await require('./rides.model').findOne({ _id: req.params.rideId, providerId: req.user.userId });
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    ride.preRideChecklist = { ...req.body, completedAt: new Date() };
+    await ride.save();
+    res.json({ message: 'Checklist saved', ride });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+// ── PASSENGER PICKED UP → in-progress ─────────────────────────────
+exports.pickupPassenger = async (req, res) => {
+  try {
+    const ride = await require('./rides.model').findOne({ _id: req.params.rideId, providerId: req.user.userId });
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    if (ride.status !== 'active' && ride.status !== 'in-progress')
+      return res.status(400).json({ message: 'Ride cannot be updated' });
+    ride.status = 'in-progress';
+    ride.passengerPickedUpAt = new Date();
+    await ride.save();
+    const io = req.app.get('io');
+    if (io) io.to(`ride-${ride._id}`).emit('passengerPickedUp', { rideId: ride._id, status: 'in-progress' });
+    res.json({ message: 'Passenger picked up — trip in progress', ride });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+// ── PASSENGER DROPPED → completed ─────────────────────────────────
+exports.dropPassenger = async (req, res) => {
+  try {
+    const Ride = require('./rides.model');
+    const ride = await Ride.findOne({ _id: req.params.rideId, providerId: req.user.userId });
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    if (ride.status !== 'in-progress')
+      return res.status(400).json({ message: 'Ride is not in progress' });
+    ride.status = 'completed';
+    ride.passengerDroppedAt = new Date();
+    ride.completedAt = new Date();
+    await ride.save();
+    const User = require('../users/users.model');
+    const user = await User.findById(req.user.userId);
+    if (user) { user.totalRides = (user.totalRides || 0) + 1; await user.save(); }
+    const io = req.app.get('io');
+    if (io) io.to(`ride-${ride._id}`).emit('passengerDropped', { rideId: ride._id, status: 'completed' });
+    res.json({ message: 'Passenger dropped — trip completed', ride });
+  } catch (err) { res.status(500).json({ message: err.message }); }
+};
+
+
+// ── REQUEST OTP FROM SEEKER ───────────────────────────────────────
+exports.requestOtpFromSeeker = async (req, res) => {
+  try {
+    const { rideId } = req.params;
+    const User = require('../users/users.model');
+    
+    const ride = await Ride.findOne({ _id: rideId, providerId: req.user.userId });
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    
+    if (ride.status !== 'active') {
+      return res.status(400).json({ message: 'Can only request OTP for active rides' });
+    }
+    
+    // Get accepted bookings to find seekers
+    const Booking = require('../bookings/bookings.model');
+    const acceptedBookings = await Booking.find({ 
+      rideId: ride._id, 
+      status: 'accepted' 
+    }).populate('seekerId', 'name phone');
+    
+    if (acceptedBookings.length === 0) {
+      return res.status(400).json({ message: 'No accepted bookings for this ride' });
+    }
+    
+    // Generate OTP for this specific ride (not permanent)
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Update ride with OTP
+    ride.otp = otp;
+    ride.otpGeneratedAt = new Date();
+    ride.isOtpVerified = false;
+    ride.otpVerifiedAt = null;
+    await ride.save();
+    
+    // Send OTP to seekers (in real app, this would be SMS)
+    const io = req.app.get('io');
+    acceptedBookings.forEach(booking => {
+      io.to(`user-${booking.seekerId._id}`).emit('otpRequested', {
+        rideId: ride._id,
+        otp: otp,
+        providerName: req.user.name,
+        pickupLocation: ride.pickup,
+        message: `Provider requested OTP. Your OTP is: ${otp}`
+      });
+    });
+    
+    res.json({ 
+      message: 'OTP sent to accepted passengers',
+      otp: otp, // Only for development - remove in production
+      otpGeneratedAt: ride.otpGeneratedAt,
+      passengersNotified: acceptedBookings.length
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ── VERIFY OTP FROM SEEKER ───────────────────────────────────────
+exports.verifyOtpFromSeeker = async (req, res) => {
+  try {
+    const { rideId } = req.params;
+    const { otp } = req.body;
+    
+    const ride = await Ride.findOne({ _id: rideId, providerId: req.user.userId });
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    
+    if (!ride.otp) {
+      return res.status(400).json({ message: 'No OTP requested for this ride' });
+    }
+    
+    if (ride.isOtpVerified) {
+      return res.status(400).json({ message: 'OTP already verified for this ride' });
+    }
+    
+    // Check if OTP is expired (5 minutes)
+    const otpAge = Date.now() - new Date(ride.otpGeneratedAt).getTime();
+    if (otpAge > 5 * 60 * 1000) {
+      return res.status(400).json({ message: 'OTP has expired. Please request a new OTP.' });
+    }
+    
+    if (ride.otp !== otp) {
+      return res.status(400).json({ message: 'Invalid OTP' });
+    }
+    
+    // Mark OTP as verified
+    ride.isOtpVerified = true;
+    ride.otpVerifiedAt = new Date();
+    await ride.save();
+    
+    // Notify all parties
+    const io = req.app.get('io');
+    io.emit('otpVerified', {
+      rideId: ride._id,
+      verifiedAt: ride.otpVerifiedAt,
+      message: 'OTP verified successfully. Ride can now start.'
+    });
+    
+    res.json({ 
+      message: 'OTP verified successfully! You can now start the ride.',
+      verifiedAt: ride.otpVerifiedAt
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ── VERIFY OTP FOR RIDE ───────────────────────────────────────────
+exports.verifyOtp = async (req, res) => {
+  try {
+    const { rideId } = req.params;
+    const { otp } = req.body;
+    const User = require('../users/users.model');
+    
+    const ride = await Ride.findOne({ _id: rideId, providerId: req.user.userId });
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    
+    // Get user's permanent OTP
+    const user = await User.findById(req.user.userId);
+    const permanentOtp = user.permanentOtp;
+    
+    if (!permanentOtp) {
+      return res.status(400).json({ message: 'No permanent OTP set for this user' });
+    }
+    
+    if (ride.isOtpVerified) {
+      return res.status(400).json({ message: 'OTP already verified for this ride' });
+    }
+    
+    // For permanent OTP, we don't check expiration - it's always valid
+    if (permanentOtp !== otp) {
+      return res.status(400).json({ message: 'Invalid OTP. Use your permanent OTP.' });
+    }
+    
+    // Mark OTP as verified
+    ride.otp = permanentOtp;
+    ride.isOtpVerified = true;
+    ride.otpVerifiedAt = new Date();
+    await ride.save();
+    
+    // Notify all parties
+    const io = req.app.get('io');
+    io.emit('otpVerified', {
+      rideId: ride._id,
+      verifiedAt: ride.otpVerifiedAt,
+      message: 'Permanent OTP verified successfully. Ride can now start.'
+    });
+    
+    res.json({ 
+      message: 'Permanent OTP verified successfully! You can now start the ride.',
+      verifiedAt: ride.otpVerifiedAt,
+      isPermanentOtp: true
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ── GET OTP STATUS ───────────────────────────────────────────
+exports.getOtpStatus = async (req, res) => {
+  try {
+    const { rideId } = req.params;
+    const User = require('../users/users.model');
+    
+    const ride = await Ride.findOne({ _id: rideId, providerId: req.user.userId })
+      .select('otp otpGeneratedAt otpVerifiedAt isOtpVerified status');
+    
+    if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    
+    // Get user's permanent OTP info
+    const user = await User.findById(req.user.userId).select('permanentOtp permanentOtpSetAt');
+    
+    const response = {
+      hasOtp: !!ride.otp,
+      isOtpVerified: ride.isOtpVerified,
+      otpGeneratedAt: ride.otpGeneratedAt,
+      otpVerifiedAt: ride.otpVerifiedAt,
+      status: ride.status,
+      isPermanentOtp: !!user.permanentOtp,
+      permanentOtpSetAt: user.permanentOtpSetAt
+    };
+    
+    // For permanent OTP, no expiration check
+    if (ride.otp && !ride.isOtpVerified && !user.permanentOtp) {
+      const otpAge = Date.now() - new Date(ride.otpGeneratedAt).getTime();
+      response.isExpired = otpAge > 5 * 60 * 1000;
+    }
+    
+    res.json(response);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ── NO MATCH SUGGEST ───────────────────────────────────────────────
+exports.noMatchSuggest = async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+    res.json({
+      message: 'No rides found near your location',
+      suggestions: [
+        { action: 'subscribe_alert', label: 'Get notified when a ride is posted on this route', endpoint: 'POST /alerts' },
+        { action: 'post_request',   label: 'Post a ride request so providers can see your need', endpoint: 'POST /alerts/ride-request' }
+      ],
+      searchedAt: new Date(), lat, lng
+    });
+  } catch (err) { res.status(500).json({ message: err.message }); }
 };

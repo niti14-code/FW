@@ -1,20 +1,38 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../context/AuthContext.jsx';
 import * as api from '../services/api.js';
+import TripStatusFlow from './TripStatusFlow.jsx';
 import './SharedPages.css';
 
 export default function ProviderBookings({ navigate }) {
+  const { user } = useAuth();
+
+  // Role validation: Only 'provider' or 'both' can view ride requests
+  const isProvider = user?.role === 'provider' || user?.role === 'both';
+  if (!isProvider) {
+    return (
+      <div className="narrow-wrap fade-up text-center" style={{paddingTop:80}}>
+        <div style={{fontSize:64}}>🚫</div>
+        <h2 className="heading mt-20" style={{fontSize:28}}>Access Denied</h2>
+        <p className="text-muted mt-8">Only providers can view ride requests. Your current role: <strong>{user?.role || 'unknown'}</strong></p>
+        <button className="btn btn-primary btn-lg mt-32" onClick={() => navigate('dashboard')}>
+          Back to Dashboard
+        </button>
+      </div>
+    );
+  }
   const [myRides,  setMyRides]  = useState([]);
-  const [selected, setSelected] = useState(null);  // selected rideId
+  const [selected, setSelected] = useState(null);
+  const [selectedRide, setSelectedRide] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [ridesLoading,   setRidesLoading]   = useState(true);
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [error,    setError]    = useState('');
-  const [actionMap, setActionMap] = useState({}); // bookingId → {loading, done}
+  const [actionMap, setActionMap] = useState({});
 
-  // Load provider's rides
   useEffect(() => {
     api.getMyRides()
-      .then(r => { setMyRides(r); if (r.length) loadBookings(r[0]._id); })
+      .then(r => { setMyRides(r); if (r.length) { loadBookings(r[0]._id); setSelectedRide(r[0]); } })
       .catch(e => setError(e.message))
       .finally(() => setRidesLoading(false));
   }, []);
@@ -75,15 +93,36 @@ export default function ProviderBookings({ navigate }) {
                   return (
                     <button key={r._id}
                       className={`pb-ride-item ${selected === r._id ? 'active' : ''}`}
-                      onClick={() => loadBookings(r._id)}>
+                      onClick={() => { loadBookings(r._id); setSelectedRide(r); }}>
                       <div className="pbr-date">{dateStr} · {r.time}</div>
                       <div className="pbr-seats text-dim text-xs">{r.seatsAvailable} seats · ₹{r.costPerSeat}</div>
+                      <div className="pbr-seats text-dim text-xs" style={{marginTop:2}}>Status: {r.status}</div>
                     </button>
                   );
                 })}
               </div>
             )}
           </div>
+
+          
+          {/* Trip status flow for selected ride */}
+          {selectedRide && selectedRide.status !== 'cancelled' && (
+            <div className="card mt-16">
+              <div className="card-header"><span className="card-title">Trip Controls</span></div>
+              <div className="card-body">
+                <TripStatusFlow
+                  ride={selectedRide}
+                  onUpdate={() => {
+                    api.getMyRides().then(r => {
+                      setMyRides(r);
+                      const updated = r.find(x => x._id === selectedRide._id);
+                      if (updated) setSelectedRide(updated);
+                    });
+                  }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Bookings panel */}
@@ -94,7 +133,6 @@ export default function ProviderBookings({ navigate }) {
             </div>
           ) : (
             <>
-              {/* Pending */}
               <div className="pb-section-head mb-16">
                 <h2 className="heading" style={{fontSize:18}}>Pending</h2>
                 {pending.length > 0 && (
@@ -145,7 +183,6 @@ export default function ProviderBookings({ navigate }) {
                 </div>
               )}
 
-              {/* Resolved */}
               {resolved.length > 0 && (
                 <>
                   <h2 className="heading mb-16" style={{fontSize:18}}>Resolved</h2>

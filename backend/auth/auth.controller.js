@@ -2,23 +2,31 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../users/users.model');
 
-// Helper function to normalize email
-const normalizeEmail = (email) => email.toLowerCase().trim();
-
 // Register user
 const register = async (req, res) => {
   try {
     const { name, email, password, phone, role, college } = req.body;
     
-    const normalizedEmail = normalizeEmail(email);
+    console.log('🔍 Registration attempt:', { email, name, role });
     
-    // Check if user already exists with normalized email
-    let user = await User.findOne({ email: normalizedEmail });
+    // Case-insensitive search
+    let user = await User.findOne({ 
+      email: { $regex: new RegExp(`^${email}$`, 'i') } 
+    });
+    
+    console.log('🔍 Existing user check result:', user ? 'FOUND' : 'NOT FOUND');
     
     if (user) {
+      console.log('🔍 Existing user details:', { 
+        id: user._id.toString(), 
+        email: user.email, 
+        name: user.name,
+        createdAt: user.createdAt,
+        role: user.role
+      });
       return res.status(400).json({ 
         message: 'User already exists',
-        debug: { existingEmail: user.email }
+        debug: { existingEmail: user.email, existingId: user._id.toString() }
       });
     }
     
@@ -27,7 +35,7 @@ const register = async (req, res) => {
     
     user = new User({
       name, 
-      email: normalizedEmail, // Always store normalized email
+      email: email.toLowerCase(), // Store email in lowercase
       password: hashedPassword, 
       phone, 
       role, 
@@ -35,6 +43,10 @@ const register = async (req, res) => {
     });
     
     await user.save();
+    console.log('✅ New user created:', { 
+      id: user._id.toString(), 
+      email: user.email 
+    });
     
     const token = jwt.sign(
       { userId: user._id },
@@ -54,6 +66,7 @@ const register = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('❌ Registration error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -63,19 +76,15 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
     
-    const normalizedEmail = normalizeEmail(email);
+    // Case-insensitive login
+    const user = await User.findOne({ 
+      email: { $regex: new RegExp(`^${email}$`, 'i') } 
+    });
     
-    // Find user with normalized email
-    const user = await User.findOne({ email: normalizedEmail });
-    
-    if (!user) {
-      return res.status(400).json({ message: 'Invalid credentials' });
-    }
+    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
     
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
-    }
+    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
     
     const token = jwt.sign(
       { userId: user._id },

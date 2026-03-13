@@ -36,3 +36,7 @@ router.get('/reports/revenue', controller.getRevenueReport);
 router.get('/reports/popular-routes', controller.getPopularRoutes);
 
 module.exports = router;
+// Settings routes (add before module.exports)
+router.get('/settings', controller.getAllSettings);
+router.post('/settings', controller.setSetting);
+router.get('/settings/:key', controller.getSetting);

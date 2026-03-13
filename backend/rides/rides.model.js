@@ -15,8 +15,13 @@ const rideSchema = new mongoose.Schema({
   seatsAvailable: { type: Number, required: true },
   costPerSeat: { type: Number, required: true },
   status: { type: String, enum: ['active', 'completed', 'cancelled', 'in-progress'], default: 'active' },
-  
-  // RECURRING RIDES FIELDS - NO DEFAULTS HERE
+  // OTP verification system
+  otp: { type: String },
+  otpGeneratedAt: { type: Date },
+  otpVerifiedAt: { type: Date },
+  isOtpVerified: { type: Boolean, default: false },
+
+  // RECURRING RIDES
   isRecurring: { type: Boolean, default: false },
   recurringPattern: {
     frequency: { type: String, enum: ['daily', 'weekly', 'weekdays', 'weekends', 'custom'], default: null },
@@ -27,7 +32,24 @@ const rideSchema = new mongoose.Schema({
   },
   parentRideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride', default: null },
   recurringGroupId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride', default: null },
-  
+
+  // PRE-RIDE SAFETY CHECKLIST
+  preRideChecklist: {
+    vehicleInspected:  { type: Boolean, default: false },
+    emergencyKitReady: { type: Boolean, default: false },
+    routeConfirmed:    { type: Boolean, default: false },
+    contactsNotified:  { type: Boolean, default: false },
+    completedAt:       { type: Date }
+  },
+
+  // TRIP STATUS FLOW
+  passengerPickedUpAt: { type: Date },
+  passengerDroppedAt:  { type: Date },
+  startedAt:   { type: Date },
+  completedAt: { type: Date },
+  cancelledAt: { type: Date },
+  cancelReason:{ type: String },
+
 }, { timestamps: true });
 
 rideSchema.index({ pickup: '2dsphere' });
