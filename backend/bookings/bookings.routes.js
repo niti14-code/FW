@@ -3,8 +3,10 @@ const router = express.Router();
 
 const controller = require('./bookings.controller');
 
-// ✅ VALID FUNCTIONS ONLY (these exist in your controller)
-router.post('/ride', controller.createRide);
+// ✅ THIS FIXES YOUR ERROR
+router.post('/request', controller.createRide);
+
+// Existing routes
 router.post('/checklist/:rideId', controller.submitChecklist);
 router.post('/pickup/:rideId', controller.pickupPassenger);
 router.post('/drop/:rideId', controller.dropPassenger);
