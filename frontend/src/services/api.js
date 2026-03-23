@@ -5,7 +5,7 @@
 // Strip any accidental trailing /api from the env value
 //const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '');
 //const BASE = (import.meta.env.VITE_API_URL || '') + '/api';
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 // ── Token / User helpers ──────────────────────────────────────────
 export const getToken   = ()  => localStorage.getItem('cr_token');
 export const setToken   = (t) => localStorage.setItem('cr_token', t);
