@@ -12,7 +12,7 @@ router.get('/my-rides', auth, controller.getMyRides);
 router.get('/recurring/:rideId/instances', auth, controller.getRecurringInstances);
 
 // One-time admin utility: backfill address strings for old rides
-router.post('/admin/backfill-addresses', auth, controller.backfillAddresses);
+//router.post('/admin/backfill-addresses', auth, controller.backfillAddresses);
 
 // Trip status flow
 router.post('/:rideId/start', auth, controller.startRide);
