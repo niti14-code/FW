@@ -282,11 +282,11 @@ export default function AdminDashboard({ navigate }) {
   }
 
   function refreshStats() {
-    apiFetch('/api/admin/stats').then(setStats).catch(() => {});
+    apiFetch('/admin/stats').then(setStats).catch(() => {});
   }
 
   useEffect(() => {
-    apiFetch('/api/admin/stats')
+    apiFetch('/admin/stats')
       .then(setStats).catch(() => {}).finally(() => setStatsLoading(false));
   }, []);
 
@@ -462,7 +462,7 @@ function UsersTab({ notify }) {
       const p = new URLSearchParams();
       if (search) p.set('search',search);
       if (roleFilter) p.set('role',roleFilter);
-      const data = await apiFetch(`/api/admin/users?${p}`);
+      const data = await apiFetch(`/admin/users?${p}`);
       setUsers(Array.isArray(data) ? data : []);
     } catch(e) { notify(e.message,'err'); }
     finally { setLoading(false); }
@@ -473,7 +473,7 @@ function UsersTab({ notify }) {
   async function toggleSuspend(id,isSusp) {
     setActing(a=>({...a,[id]:true}));
     try {
-      const data = await apiFetch(`/api/admin/users/${id}/suspend`,{method:'PUT'});
+      const data = await apiFetch(`/admin/users/${id}/suspend`,{method:'PUT'});
       setUsers(prev=>prev.map(u=>u._id===id?data.user:u));
       notify(data.message);
     } catch(e) { notify(e.message,'err'); }
@@ -539,7 +539,7 @@ function RidesTab({ notify }) {
     try {
       const p = new URLSearchParams({page,limit:15});
       if (sf) p.set('status',sf);
-      const data = await apiFetch(`/api/admin/rides?${p}`);
+      const data = await apiFetch(`/admin/rides?${p}`);
       setRides(data.rides||[]); setTotal(data.total||0); setPages(data.pages||1);
     } catch(e) { notify(e.message,'err'); }
     finally { setLoading(false); }
@@ -551,7 +551,7 @@ function RidesTab({ notify }) {
     if (!confirm('Delete this ride? All bookings will be cancelled.')) return;
     setActing(a=>({...a,[id]:true}));
     try {
-      const data = await apiFetch(`/api/admin/rides/${id}`,{method:'DELETE'});
+      const data = await apiFetch(`/admin/rides/${id}`,{method:'DELETE'});
       setRides(p=>p.filter(r=>r._id!==id)); setTotal(t=>t-1); notify(data.message);
     } catch(e) { notify(e.message,'err'); }
     finally { setActing(a=>({...a,[id]:false})); }
@@ -628,7 +628,7 @@ function KYCTab({ notify, onStatRefresh }) {
   // Fetch ALL users who have submitted KYC (any status except not_required)
   useEffect(() => {
     setLoading(true);
-    apiFetch('/api/admin/users?role=provider')
+    apiFetch('/admin/users?role=provider')
       .then(data => {
         const arr = Array.isArray(data) ? data : [];
         // Keep only users who have gone through KYC (exclude not_required)
@@ -641,7 +641,7 @@ function KYCTab({ notify, onStatRefresh }) {
   async function review(id, status) {
     setActing(a => ({ ...a, [id]: status }));
     try {
-      const data = await apiFetch(`/api/admin/kyc/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
+      const data = await apiFetch(`/admin/kyc/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
       // Update in-place so the user stays visible (just their status changes)
       setUsers(p => p.map(u => u._id === id ? { ...u, kycStatus: status } : u));
       onStatRefresh?.();
@@ -762,13 +762,13 @@ function IncidentsTab({ notify }) {
   const [acting,setActing]=useState({});
 
   useEffect(()=>{
-    apiFetch('/api/admin/incidents').then(d=>setIncidents(Array.isArray(d)?d:[])).catch(e=>notify(e.message,'err')).finally(()=>setLoading(false));
+    apiFetch('/admin/incidents').then(d=>setIncidents(Array.isArray(d)?d:[])).catch(e=>notify(e.message,'err')).finally(()=>setLoading(false));
   },[]);
 
   async function upd(id,status) {
     setActing(a=>({...a,[id]:true}));
     try {
-      await apiFetch(`/api/admin/incidents/${id}/status`,{method:'PUT',body:JSON.stringify({status})});
+      await apiFetch(`/admin/incidents/${id}/status`,{method:'PUT',body:JSON.stringify({status})});
       setIncidents(p=>p.map(i=>i._id===id?{...i,status}:i)); notify('Status updated');
     } catch(e) { notify(e.message,'err'); }
     finally { setActing(a=>({...a,[id]:false})); }

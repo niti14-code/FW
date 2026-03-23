@@ -450,7 +450,7 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
     setLoading(true);
     setFetchError('');
     try {
-      const res = await fetch(`${API_BASE}/api/ratings/${targetUserId}`);
+      const res = await fetch(`${API_BASE}/ratings/${targetUserId}`);
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       setRatings(await res.json());
     } catch (err) {
@@ -472,9 +472,9 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
       // Try multiple common booking endpoint patterns
       let list = [];
       const endpoints = [
-        `${API_BASE}/api/booking/my`,
-        `${API_BASE}/api/booking/my-bookings`,
-        `${API_BASE}/api/booking/seeker`,
+        `${API_BASE}/booking/my`,
+        `${API_BASE}/booking/my-bookings`,
+        `${API_BASE}/booking/seeker`,
       ];
 
       for (const url of endpoints) {
@@ -506,7 +506,7 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
         if (!rideId) return booking;
 
         try {
-          const rideRes = await fetch(`${API_BASE}/api/ride/${rideId}`, { headers });
+          const rideRes = await fetch(`${API_BASE}/ride/${rideId}`, { headers });
           if (rideRes.ok) {
             const rideData = await rideRes.json();
             const fullRide = rideData.ride || rideData;
@@ -562,7 +562,7 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
     setNewlyAdded(optimistic._id);
 
     try {
-      const res = await fetch(`${API_BASE}/api/ratings/add`, {
+      const res = await fetch(`${API_BASE}/ratings/add`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify(payload),

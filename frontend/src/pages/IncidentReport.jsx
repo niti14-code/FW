@@ -281,7 +281,7 @@ export default function IncidentReport({ navigate }) {
 
   /* load my incidents */
   useEffect(() => {
-    apiFetch('/api/incidents/my')
+    apiFetch('/incidents/my')
       .then(d => setIncidents(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, []);
@@ -290,7 +290,7 @@ export default function IncidentReport({ navigate }) {
   useEffect(() => {
     if (tab !== 'report') return;
     setRidesLoading(true);
-    const endpoints = ['/api/booking/my', '/api/booking/my-bookings'];
+    const endpoints = ['/booking/my', '/booking/my-bookings'];
     (async () => {
       for (const url of endpoints) {
         try {
@@ -350,7 +350,7 @@ export default function IncidentReport({ navigate }) {
         rideId:          selectedRide?.rideId || undefined,
         location,
       };
-      const res = await apiFetch('/api/incidents/report', {
+      const res = await apiFetch('/incidents/report', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
@@ -370,7 +370,7 @@ export default function IncidentReport({ navigate }) {
   async function handleEvidence(id) {
     if (!evidence.trim()) return;
     try {
-      await apiFetch(`/api/incidents/${id}/evidence`, {
+      await apiFetch(`/incidents/${id}/evidence`, {
         method: 'POST',
         body: JSON.stringify({ evidence: [evidence.trim()] }),
       });
@@ -386,7 +386,7 @@ export default function IncidentReport({ navigate }) {
   async function handleExport(id) {
     setExportingId(id);
     try {
-      const res = await apiFetch(`/api/incidents/${id}/export`, { method: 'POST' });
+      const res = await apiFetch(`/incidents/${id}/export`, { method: 'POST' });
       setIncidents(prev => prev.map(i => i._id === id
         ? { ...i, status: 'exported_to_authorities', exportRef: res.exportRef }
         : i

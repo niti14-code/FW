@@ -343,8 +343,9 @@ exports.startRide = async (req, res) => {
       scheduled.setHours(hours, minutes, 0, 0);
       const EARLY_WINDOW_MS = 15 * 60 * 1000;
       const now = new Date();
+      // Only block if the ride is in the future AND more than 15 min away
       if (now < scheduled - EARLY_WINDOW_MS) {
-        const diffMins = Math.ceil((scheduled - now) / 60000);
+        const diffMins = Math.ceil((scheduled - now - EARLY_WINDOW_MS) / 60000);
         return res.status(400).json({
           message: `Ride is scheduled for ${ride.time}. You can start up to 15 minutes early. Please wait ${diffMins} more minute${diffMins !== 1 ? 's' : ''}.`,
           scheduledTime: scheduled.toISOString(),
@@ -538,18 +539,18 @@ exports.pickupPassenger = async (req, res) => {
       return res.status(400).json({ message: 'Ride cannot be updated' });
 
     // ── Scheduled-time guard ──────────────────────────────────────
-    // Build the scheduled datetime from ride.date + ride.time (e.g. "10:35")
     if (ride.date && ride.time) {
       const [hours, minutes] = ride.time.split(':').map(Number);
       const scheduled = new Date(ride.date);
       scheduled.setHours(hours, minutes, 0, 0);
 
-      // Allow a 15-minute early window (provider arriving slightly early is fine)
       const EARLY_WINDOW_MS = 15 * 60 * 1000;
       const now = new Date();
 
+      // Block only if the ride is in the FUTURE and more than 15 min away.
+      // If the scheduled time has already passed (overdue), always allow.
       if (now < scheduled - EARLY_WINDOW_MS) {
-        const diffMins = Math.ceil((scheduled - now) / 60000);
+        const diffMins = Math.ceil((scheduled - now - EARLY_WINDOW_MS) / 60000);
         return res.status(400).json({
           message: `Ride is scheduled for ${ride.time}. You can start it up to 15 minutes before the scheduled time. Please wait ${diffMins} more minute${diffMins !== 1 ? 's' : ''}.`,
           scheduledTime: scheduled.toISOString(),
@@ -801,71 +802,6 @@ exports.noMatchSuggest = async (req, res) => {
 exports.generateOtp = async (req, res) => {
   // You can either call the existing function or implement new logic
   return exports.requestOtpFromSeeker(req, res);
-};
-
-// ── BACKFILL ADDRESSES for existing rides (run once from Postman) ──
-// POST /api/ride/admin/backfill-addresses  (requires auth)
-// Finds all rides with no pickup/drop address and reverse-geocodes them.
-exports.backfillAddresses = async (req, res) => {
-  try {
-    const rides = await Ride.find({
-      $or: [
-        { 'pickup.address': { $in: [null, ''] } },
-        { 'drop.address':   { $in: [null, ''] } },
-      ]
-    });
-
-    if (rides.length === 0) {
-      return res.json({ message: 'All rides already have addresses', updated: 0 });
-    }
-
-    async function geocode(lng, lat) {
-      try {
-        const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`;
-        const resp = await fetch(url, {
-          headers: { 'Accept-Language': 'en', 'User-Agent': 'CampusRide/1.0' }
-        });
-        const d = await resp.json();
-        const a = d.address || {};
-        // Prefer the most specific name available
-        return (
-          a.amenity || a.building || a.neighbourhood || a.suburb ||
-          a.village || a.city_district || a.city || a.town ||
-          d.display_name?.split(',')[0] ||
-          `${lat.toFixed(4)}°N ${lng.toFixed(4)}°E`
-        );
-      } catch {
-        return `${lat.toFixed(4)}°N ${lng.toFixed(4)}°E`;
-      }
-    }
-
-    let updated = 0;
-    for (const ride of rides) {
-      let changed = false;
-      if (!ride.pickup.address?.trim() && ride.pickup.coordinates?.length === 2) {
-        const [lng, lat] = ride.pickup.coordinates;
-        ride.pickup.address = await geocode(lng, lat);
-        changed = true;
-        await new Promise(r => setTimeout(r, 1100)); // Nominatim: max 1 req/sec
-      }
-      if (!ride.drop.address?.trim() && ride.drop.coordinates?.length === 2) {
-        const [lng, lat] = ride.drop.coordinates;
-        ride.drop.address = await geocode(lng, lat);
-        changed = true;
-        await new Promise(r => setTimeout(r, 1100));
-      }
-      if (changed) {
-        await ride.save();
-        updated++;
-        console.log(`✅ Ride ${ride._id}: "${ride.pickup.address}" → "${ride.drop.address}"`);
-      }
-    }
-
-    res.json({ message: `Backfilled ${updated} ride(s)`, updated });
-  } catch (err) {
-    console.error('backfillAddresses error:', err.message);
-    res.status(500).json({ message: err.message });
-  }
 };
 
 /*const Ride = require('./rides.model');

@@ -218,7 +218,7 @@ export default function RouteAlerts({ navigate }) {
 
   /* fetch alerts */
   useEffect(() => {
-    apiFetch('/api/alerts/my')
+    apiFetch('/alerts/my')
       .then(d => setAlerts(Array.isArray(d) ? d : []))
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -236,7 +236,7 @@ export default function RouteAlerts({ navigate }) {
     if (!form.pickup || !form.drop) return notify('err', 'Select both pickup and drop locations');
     setSubmitting(true);
     try {
-      const res = await apiFetch('/api/alerts', {
+      const res = await apiFetch('/alerts', {
         method: 'POST',
         body: JSON.stringify({
           name:         form.name || 'Route Alert',
@@ -259,7 +259,7 @@ export default function RouteAlerts({ navigate }) {
   /* delete alert */
   async function handleDelete(id) {
     try {
-      await apiFetch(`/api/alerts/${id}`, { method: 'DELETE' });
+      await apiFetch(`/alerts/${id}`, { method: 'DELETE' });
       setAlerts(a => a.filter(x => x._id !== id));
     } catch (err) {
       notify('err', err.message);
@@ -272,7 +272,7 @@ export default function RouteAlerts({ navigate }) {
     if (!reqForm.pickup || !reqForm.drop) return notify('err', 'Select both pickup and drop locations');
     setSubmitting(true);
     try {
-      await apiFetch('/api/alerts', {
+      await apiFetch('/alerts', {
         method: 'POST',
         body: JSON.stringify({
           name:   'Ride Request',
