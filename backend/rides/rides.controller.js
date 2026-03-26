@@ -3,7 +3,6 @@ const Ride = require('./rides.model');
 const User = require('../users/users.model');
 
 // ================= CREATE RIDE =================
-// ================= CREATE RIDE =================
 exports.createRide = async (req, res) => {
   try {
     const { pickup, drop, date, time, seatsAvailable, costPerSeat } = req.body;
@@ -72,12 +71,66 @@ exports.createRide = async (req, res) => {
 // ================= SEARCH RIDES =================
 exports.searchRides = async (req, res) => {
   try {
-    const rides = await Ride.find({ status: 'active' }).populate(
-      'providerId',
-      'name rating'
-    );
+    const { lat, lng, maxDistance = 5000, date } = req.query;
+    
+    console.log('Search params:', { lat, lng, maxDistance, date });
+
+    // Build base query - only active rides with available seats
+    const query = { 
+      status: 'active',
+      seatsAvailable: { $gt: 0 }  // Only rides with seats available
+    };
+
+    // Add date filter if provided
+    if (date) {
+      const searchDate = new Date(date);
+      const nextDay = new Date(searchDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      
+      query.date = {
+        $gte: searchDate,
+        $lt: nextDay
+      };
+      console.log('Date filter:', searchDate, 'to', nextDay);
+    }
+
+    // If coordinates provided, use geo-proximity search
+    let rides = [];
+    
+    if (lat && lng && !isNaN(parseFloat(lat)) && !isNaN(parseFloat(lng))) {
+      const latitude = parseFloat(lat);
+      const longitude = parseFloat(lng);
+      const distanceInMeters = parseInt(maxDistance) || 5000;
+      
+      console.log('Geo search:', { latitude, longitude, distanceInMeters });
+
+      // Find rides where pickup is within maxDistance
+      rides = await Ride.find({
+        ...query,
+        pickup: {
+          $near: {
+            $geometry: {
+              type: 'Point',
+              coordinates: [longitude, latitude] // [lng, lat] for MongoDB
+            },
+            $maxDistance: distanceInMeters
+          }
+        }
+      }).populate('providerId', 'name rating');
+      
+      console.log(`Found ${rides.length} rides within ${distanceInMeters}m`);
+    } else {
+      // No coordinates - return all rides matching date filter (if any)
+      rides = await Ride.find(query)
+        .populate('providerId', 'name rating')
+        .sort({ date: 1, time: 1 });
+      
+      console.log(`Found ${rides.length} rides (no geo filter)`);
+    }
+
     res.json(rides);
   } catch (error) {
+    console.error('Search rides error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -171,9 +224,32 @@ exports.pickupPassenger = async (req, res) => {
 
     if (!ride) return res.status(404).json({ message: 'Ride not found' });
 
+    // FIXED: Check if pre-ride checklist is completed
+    const preRide = ride.preRideChecklist || {};
+    const allChecksDone = preRide.vehicleInspected && 
+                          preRide.emergencyKitReady && 
+                          preRide.routeConfirmed && 
+                          preRide.contactsNotified;
+    
+    if (!allChecksDone) {
+      return res.status(400).json({ 
+        message: 'Pre-ride checklist not completed. Please complete all safety checks first.' 
+      });
+    }
+
     ride.status = 'in-progress';
     ride.passengerPickedUpAt = new Date();
     await ride.save();
+
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`ride-${ride._id}`).emit('passengerPickedUp', {
+        rideId: ride._id,
+        status: 'in-progress',
+        pickedUpAt: ride.passengerPickedUpAt
+      });
+    }
 
     res.json({ message: 'Passenger picked up', ride });
   } catch (err) {
@@ -216,8 +292,22 @@ exports.startRide = async (req, res) => {
     const ride = await Ride.findOne({ _id: rideId, providerId: req.user.userId });
 
     if (!ride) return res.status(404).json({ message: 'Ride not found' });
+    
     if (ride.status !== 'active') {
       return res.status(400).json({ message: 'Ride cannot be started' });
+    }
+
+    // FIXED: Check if pre-ride checklist is completed
+    const preRide = ride.preRideChecklist || {};
+    const allChecksDone = preRide.vehicleInspected && 
+                          preRide.emergencyKitReady && 
+                          preRide.routeConfirmed && 
+                          preRide.contactsNotified;
+    
+    if (!allChecksDone) {
+      return res.status(400).json({ 
+        message: 'Pre-ride checklist not completed. Please complete all safety checks first.' 
+      });
     }
 
     ride.status = 'in-progress';
@@ -237,7 +327,7 @@ exports.startRide = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-};
+}; 
 
 // ================= COMPLETE RIDE =================
 exports.completeRide = async (req, res) => {
@@ -300,13 +390,23 @@ exports.cancelRide = async (req, res) => {
       { status: 'cancelled' }
     );
 
+    // FIXED: Emit socket event to notify all connected clients
     const io = req.app.get('io');
     if (io) {
-      io.to(`ride-${rideId}`).emit('rideCancelled', { rideId, status: 'cancelled', reason });
+      io.to(`ride-${rideId}`).emit('rideCancelled', { 
+        rideId, 
+        status: 'cancelled', 
+        reason,
+        cancelledAt: ride.cancelledAt,
+        cancelledBy: 'provider'
+      });
+      
+      console.log(`Emitted rideCancelled event to ride-${rideId}`);
     }
 
     res.json({ message: 'Ride cancelled', ride });
   } catch (error) {
+    console.error('Cancel ride error:', error);
     res.status(500).json({ message: error.message });
   }
 };

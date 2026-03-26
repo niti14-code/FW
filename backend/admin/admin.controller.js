@@ -77,7 +77,7 @@ exports.getUsers = async (req, res) => {
     }
 
     const users = await User.find(filter)
-      .select('-password')
+      .select('-password')  // This excludes password but includes kycDocuments
       .sort({ createdAt: -1 });
 
     res.json(users);

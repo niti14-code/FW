@@ -31,54 +31,76 @@ const request = async (path, options = {}) => {
 };
 
 // ══════════════════════════════════════════════════════════════════
-//  LOCATION SEARCH (OpenStreetMap Nominatim)
+//  LOCATION SEARCH (Use backend proxy to avoid CORS)
 // ══════════════════════════════════════════════════════════════════
-// frontend/src/services/api.js - CORRECTED (searchLocation function only)
+
+// FIXED: Use backend proxy instead of direct Nominatim to avoid CORS
 export const searchLocation = async (query) => {
   try {
     console.log('Searching for location:', query);
     
-    // FIXED: Try API first, fallback only on failure
+    // Try backend proxy first (avoids CORS)
     try {
       const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=in`,
+        `${API_BASE}/location/search?q=${encodeURIComponent(query)}`,
         {
           headers: {
-            'User-Agent': 'CampusRide/1.0'
+            'Authorization': `Bearer ${getToken()}`,
+            'Content-Type': 'application/json'
           }
         }
       );
       
-      if (!response.ok) {
-        console.log('API failed, using fallbacks');
-        return getFallbackLocations(query);
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.length > 0) {
+          return data;
+        }
       }
-      
-      const data = await response.json();
-      console.log('API response:', data);
-      
-      // If we get results, return them
-      if (data && data.length > 0) {
-        return data.map(place => ({
-          display_name: place.display_name,
-          lat: parseFloat(place.lat),
-          lng: parseFloat(place.lon),
-          label: place.display_name.split(',')[0]
-        }));
-      }
-      
-      // If no results, return fallbacks
-      console.log('No results, using fallbacks');
-      return getFallbackLocations(query);
-      
-    } catch (apiError) {
-      console.log('API error, using fallbacks:', apiError);
-      return getFallbackLocations(query);
+    } catch (backendError) {
+      console.log('Backend location search failed, using fallbacks:', backendError);
     }
+    
+    // Fallback to local hardcoded locations
+    return getFallbackLocations(query);
     
   } catch (error) {
     console.error('Location search failed:', error);
     return getFallbackLocations(query);
+  }
+};
+
+// FIXED: Use backend proxy for reverse geocode
+export const reverseGeocode = async (lat, lng) => {
+  try {
+    // Try backend proxy first (avoids CORS)
+    const response = await fetch(
+      `${API_BASE}/location/reverse?lat=${lat}&lng=${lng}`,
+      {
+        headers: {
+          'Authorization': `Bearer ${getToken()}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      return {
+        display_name: data.display_name || data.label,
+        label: data.label || 'Unknown Location'
+      };
+    }
+    
+    throw new Error('Backend reverse geocode failed');
+    
+  } catch (error) {
+    console.error('Reverse geocoding failed:', error);
+    // Return coordinate string as last resort
+    return { 
+      display_name: `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`, 
+      label: `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E` 
+    };
   }
 };
 
@@ -409,27 +431,6 @@ const getFallbackLocations = (query) => {
   return mapped;
 };
 
-export const reverseGeocode = async (lat, lng) => {
-  try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
-      {
-        headers: {
-          'User-Agent': 'CampusRide/1.0'
-        }
-      }
-    );
-    const data = await response.json();
-    return {
-      display_name: data.display_name,
-      label: data.display_name?.split(',')[0] || 'Unknown Location'
-    };
-  } catch (error) {
-    console.error('Reverse geocoding failed:', error);
-    return { display_name: 'Unknown Location', label: 'Unknown Location' };
-  }
-};
-
 // ══════════════════════════════════════════════════════════════════
 //  AUTH
 // ══════════════════════════════════════════════════════════════════
@@ -455,9 +456,17 @@ export const createRide = (body) =>
   request('/ride/create', { method: 'POST', body: JSON.stringify(body) });
 
 export const searchRides = ({ lat, lng, maxDistance = 5000, date } = {}) => {
-  const p = new URLSearchParams({ lat, lng, maxDistance });
-  if (date) p.append('date', date);
-  return request(`/ride/search?${p}`);
+  const params = new URLSearchParams();
+  
+  if (lat) params.append('lat', lat);
+  if (lng) params.append('lng', lng);
+  if (maxDistance) params.append('maxDistance', maxDistance);
+  if (date) params.append('date', date);
+  
+  const url = `/ride/search?${params.toString()}`;
+  console.log('API call:', url);
+  
+  return request(url);
 };
 
 export const getMyRides  = ()     => request('/ride/my');
@@ -570,3 +579,26 @@ export async function apiFetch(url, options = {}) {
 
   return data;
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  KYC
+// ══════════════════════════════════════════════════════════════════
+
+// Submit KYC documents (expects URLs from file upload)
+export const submitKyc = (body) =>
+  request('/kyc/submit', { method: 'POST', body: JSON.stringify(body) });
+
+// Get KYC status and documents
+export const getKycStatus = () =>
+  request('/kyc/status');
+
+export const uploadKycFile = async (file) => {
+  // Option 1: Convert to base64 and send directly
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result); // base64 string
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  
+};

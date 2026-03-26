@@ -23,16 +23,22 @@ const userSchema = new mongoose.Schema({
   totalRides: { type: Number, default: 0 },
   suspended:  { type: Boolean, default: false },
 
+  // KYC fields - updated for new flow
   kycStatus: {
     type: String,
-    enum: ['not_required', 'pending', 'approved', 'rejected'],
-    default: 'not_required'
+    enum: ['not_submitted', 'pending', 'approved', 'rejected'],
+    default: 'not_submitted'
   },
   kycDocuments: {
     aadhar:         String,
     drivingLicense: String,
-    collegeIdCard:  String
+    collegeIdCard:  String,
+    selfie:         String      // Added for selfie verification
   },
+  kycSubmittedAt:   { type: Date },      // Added: track submission time
+  kycVerifiedAt:    { type: Date },      // Added: track verification time
+  kycRemarks:       { type: String },    // Added: admin rejection reason
+  
   emergencyContact: { type: String, default: '' },
 }, { timestamps: true });
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as api from '../services/api.js';
+import io from 'socket.io-client';
 import RideTracker from './RideTracker.jsx';
 import './SharedPages.css';
 
@@ -62,24 +63,68 @@ export default function MyBookings({ navigate }) {
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState('');
   const [tracking, setTracking] = useState(null);
+  const [socket,   setSocket]   = useState(null);
+
+  // FIXED: Fetch bookings function (extracted for reuse)
+  const fetchBookings = async () => {
+    try {
+      const data = await api.getMyBookings();
+      setBookings(data);
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
   useEffect(() => {
-    api.getMyBookings()
-      .then(setBookings)
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+    fetchBookings().finally(() => setLoading(false));
 
+    // FIXED: Setup socket connection for real-time updates
+    const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
+    setSocket(newSocket);
 
-  }, []);
+    // Join user room for personal notifications
+    if (user?.id) {
+      newSocket.emit('join-user', user.id);
+    }
 
-  const bookingIcon = { pending:'⏳', accepted:'✅', rejected:'❌' };
+    // Listen for ride cancellation
+    newSocket.on('rideCancelled', (data) => {
+      console.log('Ride cancelled received:', data);
+      alert(`Ride has been cancelled by provider. Reason: ${data.reason || 'No reason provided'}`);
+      
+      // Refresh bookings list
+      fetchBookings();
+      
+      // Close tracker if open
+      if (tracking && tracking.rideId?._id === data.rideId) {
+        setTracking(null);
+      }
+    });
+
+    // Listen for booking status changes
+    newSocket.on('bookingStatusChanged', (data) => {
+      console.log('Booking status changed:', data);
+      fetchBookings();
+    });
+
+    // Poll every 30 seconds as backup
+    const interval = setInterval(fetchBookings, 30000);
+
+    return () => {
+      newSocket.disconnect();
+      clearInterval(interval);
+    };
+  }, [user?.id, tracking]);
+
+  const bookingIcon = { pending:'⏳', accepted:'✅', rejected:'❌', cancelled:'🚫' };
 
   const getRideStatusBadge = (b) => {
-    if (b.status !== 'accepted') return null;
+    if (b.status !== 'accepted' && b.status !== 'cancelled') return null;
     const s = b.rideId?.status;
     if (s === 'in-progress') return { label:'🚗 In Progress', color:'#ffd700' };
     if (s === 'completed')   return { label:'🎉 Completed',   color:'#a0f4a0' };
     if (s === 'cancelled')   return { label:'❌ Cancelled',   color:'#f4a0a0' };
+    if (b.status === 'cancelled') return { label:'🚫 Booking Cancelled', color:'#f4a0a0' };
     return null;
   };
 
@@ -115,7 +160,7 @@ export default function MyBookings({ navigate }) {
           />
         ))}
       </div>
-      {tracking && <RideTracker booking={tracking} onClose={() => setTracking(null)} />}
+      {tracking && <RideTracker booking={tracking} onClose={() => setTracking(null)} socket={socket} />}
     </div>
   );
 }
@@ -130,17 +175,22 @@ function BookingCard({ b, getRideStatusBadge, bookingIcon, onTrack }) {
 
   const dateStr = new Date(ride.date).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'});
   const statusBadge = getRideStatusBadge(b);
-  const canTrack = b.status === 'accepted' && ride.status !== 'cancelled';
+  
+  // FIXED: Check both booking status and ride status
+  const isCancelled = b.status === 'cancelled' || ride.status === 'cancelled';
+  const canTrack = b.status === 'accepted' && ride.status !== 'cancelled' && ride.status !== 'completed';
+  
   const trackLabel = ride.status === 'in-progress' ? '🚗 Track Live Ride'
                    : ride.status === 'completed'   ? '📋 View Trip Summary'
+                   : ride.status === 'cancelled'   ? '🚫 Ride Cancelled'
                    : '🗺️ Track Ride';
 
   return (
-    <div className="bk-card card">
+    <div className={`bk-card card ${isCancelled ? 'cancelled' : ''}`}>
       <div className="card-header">
         <span className="card-title">Booking #{b._id.slice(-6).toUpperCase()}</span>
         <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4}}>
-          <span className={`badge badge-${b.status}`}>{bookingIcon[b.status]} {b.status}</span>
+          <span className={`badge badge-${b.status}`}>{bookingIcon[b.status] || '•'} {b.status}</span>
           {statusBadge && <span style={{fontSize:12,color:statusBadge.color,fontWeight:600}}>{statusBadge.label}</span>}
         </div>
       </div>
@@ -173,9 +223,14 @@ function BookingCard({ b, getRideStatusBadge, bookingIcon, onTrack }) {
             {trackLabel}
           </button>
         )}
+        {isCancelled && (
+          <div className="alert alert-error mt-16">
+            This ride has been cancelled. {ride.cancelReason && `Reason: ${ride.cancelReason}`}
+          </div>
+        )}
         {b.status === 'rejected' && (
           <div className="alert alert-error mt-16">Booking rejected. Try searching for another ride.</div>
         )}
       </div>
     </div>
-  )};
+  )}

@@ -132,8 +132,10 @@ const adminRoutes = require('./admin/admin.routes');
 const alertsRoutes = require('./alerts/alerts.routes');
 const sosRoutes = require('./sos/sos.routes');
 const incidentsRoutes = require('./incidents/incidents.routes');
+const locationRoutes = require('./location/location.routes');
 
-// FIXED: Consistent /api prefix for all routes
+// Add this with your other app.use routes
+app.use('/api/location', locationRoutes);
 app.use('/api/ride', ridesRoutes);
 app.use('/api/booking', bookingsRoutes);
 app.use('/api/ratings', ratingsRoutes);

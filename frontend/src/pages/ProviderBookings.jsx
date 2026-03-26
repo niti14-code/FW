@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as api from '../services/api.js';
+import io from 'socket.io-client';
 import TripStatusFlow from "../components/TripStatusFlow.jsx";
 import './SharedPages.css';
 
@@ -29,12 +30,39 @@ export default function ProviderBookings({ navigate }) {
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [error,    setError]    = useState('');
   const [actionMap, setActionMap] = useState({});
+  const [socket, setSocket] = useState(null);
+
+  // FIXED: Extracted fetch function for reuse
+  const fetchRides = async () => {
+    try {
+      const r = await api.getMyRides();
+      setMyRides(r);
+      if (r.length && !selectedRide) {
+        loadBookings(r[0]._id);
+        setSelectedRide(r[0]);
+      } else if (selectedRide) {
+        // Update selected ride data
+        const updated = r.find(x => x._id === selectedRide._id);
+        if (updated) setSelectedRide(updated);
+      }
+    } catch (e) {
+      setError(e.message);
+    }
+  };
 
   useEffect(() => {
-    api.getMyRides()
-      .then(r => { setMyRides(r); if (r.length) { loadBookings(r[0]._id); setSelectedRide(r[0]); } })
-      .catch(e => setError(e.message))
-      .finally(() => setRidesLoading(false));
+    fetchRides().finally(() => setRidesLoading(false));
+
+    // FIXED: Setup socket
+    const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
+    setSocket(newSocket);
+
+    // Join all my rides rooms
+    newSocket.on('connect', () => {
+      console.log('Provider socket connected');
+    });
+
+    return () => newSocket.disconnect();
   }, []);
 
   const loadBookings = async (rideId) => {
@@ -58,6 +86,29 @@ export default function ProviderBookings({ navigate }) {
       setActionMap(m => ({ ...m, [bookingId]: { done: true } }));
     } catch (e) {
       setActionMap(m => ({ ...m, [bookingId]: { error: e.message } }));
+    }
+  };
+
+  // FIXED: Handle ride cancellation with socket notification
+  const handleCancelRide = async (rideId, reason) => {
+    try {
+      await api.cancelRide(rideId, reason);
+      
+      // Emit socket event to notify seekers
+      if (socket) {
+        socket.emit('join-ride', rideId);
+        socket.emit('provider-cancelled', {
+          rideId: rideId,
+          reason: reason || 'Provider cancelled',
+          cancelledAt: new Date()
+        });
+      }
+      
+      // Refresh rides list
+      await fetchRides();
+      alert('Ride cancelled. All seekers have been notified.');
+    } catch (e) {
+      setError(e.message);
     }
   };
 
@@ -90,13 +141,16 @@ export default function ProviderBookings({ navigate }) {
               <div className="pb-ride-list">
                 {myRides.map(r => {
                   const dateStr = new Date(r.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+                  const isCancelled = r.status === 'cancelled';
                   return (
                     <button key={r._id}
-                      className={`pb-ride-item ${selected === r._id ? 'active' : ''}`}
+                      className={`pb-ride-item ${selected === r._id ? 'active' : ''} ${isCancelled ? 'cancelled' : ''}`}
                       onClick={() => { loadBookings(r._id); setSelectedRide(r); }}>
                       <div className="pbr-date">{dateStr} · {r.time}</div>
                       <div className="pbr-seats text-dim text-xs">{r.seatsAvailable} seats · ₹{r.costPerSeat}</div>
-                      <div className="pbr-seats text-dim text-xs" style={{marginTop:2}}>Status: {r.status}</div>
+                      <div className="pbr-seats text-dim text-xs" style={{marginTop:2, color: isCancelled ? '#f4a0a0' : 'inherit'}}>
+                        Status: {r.status}
+                      </div>
                     </button>
                   );
                 })}
@@ -113,13 +167,23 @@ export default function ProviderBookings({ navigate }) {
                 <TripStatusFlow
                   ride={selectedRide}
                   onUpdate={() => {
-                    api.getMyRides().then(r => {
-                      setMyRides(r);
-                      const updated = r.find(x => x._id === selectedRide._id);
-                      if (updated) setSelectedRide(updated);
-                    });
+                    fetchRides();
+                    if (selected) loadBookings(selected);
                   }}
                 />
+              </div>
+            </div>
+          )}
+          
+          {/* Show cancelled ride info */}
+          {selectedRide && selectedRide.status === 'cancelled' && (
+            <div className="card mt-16" style={{borderColor: '#f4a0a0'}}>
+              <div className="card-header" style={{color: '#f4a0a0'}}>
+                <span className="card-title">❌ Ride Cancelled</span>
+              </div>
+              <div className="card-body">
+                <p className="text-muted">This ride was cancelled on {new Date(selectedRide.cancelledAt).toLocaleString()}</p>
+                {selectedRide.cancelReason && <p>Reason: {selectedRide.cancelReason}</p>}
               </div>
             </div>
           )}

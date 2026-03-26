@@ -1,81 +1,72 @@
 const User = require('../users/users.model');
 
-// Submit KYC (ONLY PROVIDERS)
+// Submit KYC (Providers: aadhar + drivingLicense + collegeIdCard, Seekers: aadhar + collegeIdCard)
 exports.submitKyc = async (req, res) => {
   try {
     const user = await User.findById(req.user.userId);
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    // ❌ Block seekers
-    if (!['provider', 'both'].includes(user.role)) {
-      return res.status(403).json({ message: "KYC only for providers" });
+    const { aadharUrl, drivingLicenseUrl, collegeIdCardUrl, selfieUrl } = req.body;
+
+    // Validate based on role
+    const isProvider = ['provider', 'both'].includes(user.role);
+    const isSeeker = ['seeker', 'both'].includes(user.role);
+
+    // All users need aadhar and college ID
+    if (!aadharUrl || !collegeIdCardUrl) {
+      return res.status(400).json({ 
+        message: "Aadhar and College ID are required for all users" 
+      });
     }
 
-    const { aadhar, drivingLicense, collegeIdCard } = req.body;
+    // Providers also need driving license
+    if (isProvider && !drivingLicenseUrl) {
+      return res.status(400).json({ 
+        message: "Driving License is required for providers" 
+      });
+    }
 
+    // FIXED: Explicitly set kycStatus to 'pending'
     user.kycDocuments = {
-      aadhar,
-      drivingLicense,
-      collegeIdCard
+      aadhar: aadharUrl,
+      drivingLicense: isProvider ? drivingLicenseUrl : null,
+      collegeIdCard: collegeIdCardUrl,
+      selfie: selfieUrl || null
     };
 
-    user.kycStatus = 'pending';
+    user.kycStatus = 'pending';  // This is the key line!
+    user.kycSubmittedAt = new Date();
 
     await user.save();
 
-    res.json({
-      message: "KYC submitted. Waiting for admin approval.",
-      kycStatus: user.kycStatus
-    });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-
-// Get KYC Status
-exports.getKycStatus = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId)
-      .select("kycStatus kycDocuments role");
+    // DEBUG: Log to verify
+    console.log('KYC submitted for user:', user._id, 'Status:', user.kycStatus);
 
     res.json({
-      role: user.role,
+      message: "KYC submitted successfully. Waiting for admin approval.",
       kycStatus: user.kycStatus,
       documents: user.kycDocuments
     });
 
   } catch (error) {
+    console.error('KYC submit error:', error);
     res.status(500).json({ error: error.message });
   }
 };
 
-/*const User = require('../users/users.model');
-
-// Submit KYC
-exports.submitKyc = async (req, res) => {
+// Get KYC Status and Documents
+exports.getKycStatus = async (req, res) => {
   try {
-    const { studentId, license } = req.body;
-
-    const user = await User.findById(req.user.userId);
-
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (studentId !== undefined) {
-      user.verified.studentId = studentId;
-    }
-
-    if (license !== undefined) {
-      user.verified.license = license;
-    }
-
-    await user.save();
+    const user = await User.findById(req.user.userId)
+      .select("kycStatus kycDocuments role kycSubmittedAt kycVerifiedAt");
 
     res.json({
-      message: "KYC submitted successfully",
-      verified: user.verified
+      role: user.role,
+      kycStatus: user.kycStatus, // 'pending', 'approved', 'rejected', 'not_submitted'
+      documents: user.kycDocuments,
+      submittedAt: user.kycSubmittedAt,
+      verifiedAt: user.kycVerifiedAt
     });
 
   } catch (error) {
@@ -83,16 +74,46 @@ exports.submitKyc = async (req, res) => {
   }
 };
 
-
-// Get verification status
-exports.getKycStatus = async (req, res) => {
+// Admin: Get all pending KYCs
+exports.getPendingKyc = async (req, res) => {
   try {
+    const pending = await User.find({ kycStatus: 'pending' })
+      .select('name email role kycDocuments kycSubmittedAt');
+    
+    res.json(pending);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
-    const user = await User.findById(req.user.userId).select("verified");
+// Admin: Approve/Reject KYC
+exports.reviewKyc = async (req, res) => {
+  try {
+    const { userId, status, remarks } = req.body; // status: 'approved' or 'rejected'
 
-    res.json(user.verified);
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.kycStatus = status;
+    user.kycRemarks = remarks || '';
+    user.kycVerifiedAt = new Date();
+
+    await user.save();
+
+    res.json({
+      message: `KYC ${status}`,
+      user: {
+        id: user._id,
+        name: user.name,
+        kycStatus: user.kycStatus
+      }
+    });
 
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-};*/
+};

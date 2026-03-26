@@ -15,6 +15,12 @@ module.exports = {
         console.log(`Socket ${socket.id} joined ride-${rideId}`);
       });
       
+      // FIXED: Join user room for personal notifications
+      socket.on("join-user", (userId) => {
+        socket.join(`user-${userId}`);
+        console.log(`Socket ${socket.id} joined user-${userId}`);
+      });
+      
       socket.on("disconnect", () => {
         console.log("Socket disconnected:", socket.id);
       });

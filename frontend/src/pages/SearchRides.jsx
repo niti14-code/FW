@@ -40,34 +40,54 @@ export default function SearchRides({ navigate }) {
     );
   };
 
-  const doSearch = useCallback(async e => {
-    e?.preventDefault();
-    setError('');
-    setNoMatchSuggestions(null);
-    if (!filters.lat || !filters.lng) { setError('Enter or detect your location first'); return; }
-    setLoading(true);
-    try {
-      const data = await api.searchRides({
-        lat: filters.lat, lng: filters.lng,
-        maxDistance: filters.maxDistance,
-        date: filters.date || undefined,
-      });
-      setRides(data);
-      setSearched(true);
-      setBookingMap({});
-      // If no rides found, fetch suggestions
-      if (!data || data.length === 0) {
-        try {
-          const suggestions = await api.noMatchSuggest({ lat: filters.lat, lng: filters.lng });
-          setNoMatchSuggestions(suggestions);
-        } catch {}
+const doSearch = useCallback(async e => {
+  e?.preventDefault();
+  setError('');
+  setNoMatchSuggestions(null);
+  
+  // Validate location is set
+  if (!filters.lat || !filters.lng) { 
+    setError('Enter or detect your location first'); 
+    return; 
+  }
+  
+  setLoading(true);
+  
+  try {
+    console.log('Searching with filters:', filters);
+    
+    const data = await api.searchRides({
+      lat: parseFloat(filters.lat), 
+      lng: parseFloat(filters.lng),
+      maxDistance: parseInt(filters.maxDistance),
+      date: filters.date || undefined,  // Only send if set
+    });
+    
+    console.log(`Found ${data.length} rides`);
+    
+    setRides(data);
+    setSearched(true);
+    setBookingMap({});
+    
+    // If no rides found, fetch suggestions
+    if (!data || data.length === 0) {
+      try {
+        const suggestions = await api.noMatchSuggest({ 
+          lat: filters.lat, 
+          lng: filters.lng 
+        });
+        setNoMatchSuggestions(suggestions);
+      } catch (err) {
+        console.log('No suggestions available');
       }
-    } catch (err) {
-      setError(err.message || 'Search failed');
-    } finally {
-      setLoading(false);
     }
-  }, [filters]);
+  } catch (err) {
+    console.error('Search error:', err);
+    setError(err.message || 'Search failed');
+  } finally {
+    setLoading(false);
+  }
+}, [filters]);
 
   const book = async (rideId) => {
     setBookingMap(m => ({ ...m, [rideId]: { loading: true } }));

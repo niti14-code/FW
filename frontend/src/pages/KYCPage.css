@@ -69,3 +69,50 @@
   .kyc-review-grid { grid-template-columns: 1fr; }
   .kyc-selfie-label { width: 200px; height: 200px; }
 }
+
+.kyc-status-badge {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 20px;
+  color: white;
+  font-weight: 600;
+  font-size: 12px;
+  margin-top: 16px;
+}
+
+.kyc-submitted-docs {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 20px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.kyc-docs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.kyc-doc-item {
+  text-align: center;
+}
+
+.kyc-doc-label {
+  color: #888;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.kyc-doc-img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #333;
+}
+
+.kyc-upload-box.missing {
+  opacity: 0.5;
+  border: 1px dashed #dc3545;
+}

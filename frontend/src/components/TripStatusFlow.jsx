@@ -1,10 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as api from '../services/api.js';
+import PreRideChecklist from '../pages/PreRideChecklist.jsx';
+import io from 'socket.io-client';
 import './TripStatusFlow.css';
 
 export default function TripStatusFlow({ ride, onUpdate }) {
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError]         = useState('');
+  const [error, setError] = useState('');
+  const [showChecklist, setShowChecklist] = useState(false);
+  const [checklistCompleted, setChecklistCompleted] = useState(false);
+
+  // Check if pre-ride checklist is already completed
+  useEffect(() => {
+    if (ride?.preRideChecklist?.completedAt) {
+      setChecklistCompleted(true);
+    }
+  }, [ride]);
 
   const act = async (fn, label) => {
     setIsLoading(true);
@@ -12,6 +23,19 @@ export default function TripStatusFlow({ ride, onUpdate }) {
     try {
       const res = await fn();
       if (res?.message) alert(res.message);
+      
+      // Socket emission for cancellation
+      if (label === 'cancel ride') {
+        const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
+        socket.emit('join-ride', ride._id);
+        socket.emit('provider-cancelled', {
+          rideId: ride._id,
+          reason: res.ride?.cancelReason || 'Provider cancelled',
+          cancelledAt: new Date()
+        });
+        socket.disconnect();
+      }
+      
       onUpdate();
     } catch (e) {
       setError(e.message || `Failed to ${label}`);
@@ -20,7 +44,21 @@ export default function TripStatusFlow({ ride, onUpdate }) {
     }
   };
 
+  // Handle checklist completion
+  const handleChecklistComplete = () => {
+    setChecklistCompleted(true);
+    setShowChecklist(false);
+    onUpdate(); // Refresh ride data
+  };
+
   const status = ride?.status;
+
+  // Check if all pre-ride checks are done
+  const preRideChecks = ride?.preRideChecklist || {};
+  const allChecksDone = preRideChecks.vehicleInspected && 
+                        preRideChecks.emergencyKitReady && 
+                        preRideChecks.routeConfirmed && 
+                        preRideChecks.contactsNotified;
 
   return (
     <div className="trip-status-flow">
@@ -33,11 +71,65 @@ export default function TripStatusFlow({ ride, onUpdate }) {
 
       {error && <div className="alert alert-error" style={{marginBottom:12}}>{error}</div>}
 
+      {/* Pre-Ride Checklist Section */}
+      {status === 'active' && !allChecksDone && (
+        <div className="checklist-section" style={{marginBottom: 20}}>
+          {!showChecklist ? (
+            <div className="checklist-prompt" style={{
+              background: 'rgba(255, 193, 7, 0.1)', 
+              border: '1px solid rgba(255, 193, 7, 0.3)', 
+              borderRadius: 10, 
+              padding: 16,
+              textAlign: 'center'
+            }}>
+              <div style={{fontSize: 32, marginBottom: 8}}>✅</div>
+              <h5 style={{color: '#ffc107', marginBottom: 8}}>Pre-Ride Checklist Required</h5>
+              <p style={{color: '#aaa', fontSize: 14, marginBottom: 12}}>
+                Complete safety checklist before picking up passenger
+              </p>
+              <button 
+                className="btn btn-warning"
+                onClick={() => setShowChecklist(true)}
+              >
+                Start Checklist
+              </button>
+            </div>
+          ) : (
+            <PreRideChecklist 
+              rideId={ride._id} 
+              onComplete={handleChecklistComplete}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Checklist Completed Indicator */}
+      {status === 'active' && allChecksDone && (
+        <div className="checklist-completed" style={{
+          background: 'rgba(40, 167, 69, 0.1)', 
+          border: '1px solid rgba(40, 167, 69, 0.3)', 
+          borderRadius: 10, 
+          padding: 12,
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10
+        }}>
+          <span style={{fontSize: 20}}>✅</span>
+          <div>
+            <div style={{color: '#28a745', fontWeight: 600}}>Pre-Ride Checklist Complete</div>
+            <div style={{color: '#aaa', fontSize: 12}}>
+              Completed at {new Date(preRideChecks.completedAt).toLocaleTimeString()}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="tsf-actions">
         <div className="action-buttons">
 
-          {/* Active → pick up passenger */}
-          {status === 'active' && (
+          {/* Active → pick up passenger (ONLY if checklist done) */}
+          {status === 'active' && allChecksDone && (
             <button
               className="btn btn-primary btn-lg"
               onClick={() => act(() => api.pickupPassenger(ride._id), 'pick up passenger')}
@@ -47,14 +139,25 @@ export default function TripStatusFlow({ ride, onUpdate }) {
             </button>
           )}
 
-          {/* Active → start ride */}
-          {status === 'active' && (
+          {/* Active → start ride (ONLY if checklist done) */}
+          {status === 'active' && allChecksDone && (
             <button
               className="btn btn-success btn-lg"
               onClick={() => act(() => api.startRide(ride._id), 'start ride')}
               disabled={isLoading}
             >
               {isLoading ? '🔄 Starting...' : '🚀 Start Ride'}
+            </button>
+          )}
+
+          {/* Disabled state when checklist not done */}
+          {status === 'active' && !allChecksDone && (
+            <button
+              className="btn btn-secondary btn-lg"
+              disabled={true}
+              style={{opacity: 0.5, cursor: 'not-allowed'}}
+            >
+              🔒 Complete Checklist First
             </button>
           )}
 

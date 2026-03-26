@@ -1,34 +1,77 @@
 import React, { useState, useEffect } from 'react';
 
-const geoCache = new Map();
+// ══════════════════════════════════════════════════════════════════
+//  FALLBACK LOCATIONS DATABASE
+// ══════════════════════════════════════════════════════════════════
 
-// FIXED: Properly handle [lng, lat] format from MongoDB and correct display
-async function reverseGeocode(coordinates) {
-  if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
-    return 'Unknown location';
-  }
+const FALLBACK_LOCATIONS = [
+  // Colleges
+  { name: 'rv college of engineering', display: 'RV College of Engineering', coords: [77.4958, 12.9215] },
+  { name: 'bms college of engineering', display: 'BMS College of Engineering', coords: [77.5908, 12.9611] },
+  { name: 'pes university', display: 'PES University', coords: [77.5366, 12.9345] },
+  { name: 'pesit', display: 'PESIT', coords: [77.5366, 12.9345] },
+  { name: 'ms ramaiah institute', display: 'MS Ramaiah Institute of Technology', coords: [77.5770, 13.0163] },
+  { name: 'ramaiah', display: 'MS Ramaiah Institute of Technology', coords: [77.5770, 13.0163] },
+  { name: 'bangalore institute of technology', display: 'Bangalore Institute of Technology', coords: [77.6007, 12.9539] },
+  { name: 'bit', display: 'Bangalore Institute of Technology', coords: [77.6007, 12.9539] },
+  { name: 'rns institute of technology', display: 'RNS Institute of Technology', coords: [77.4983, 12.9358] },
+  { name: 'rnsit', display: 'RNS Institute of Technology', coords: [77.4983, 12.9358] },
   
-  const [lng, lat] = coordinates; // MongoDB stores [lng, lat]
-  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  // Areas
+  { name: 'marathahalli', display: 'Marathahalli', coords: [77.6995, 12.9591] },
+  { name: 'marthahalli', display: 'Marathahalli', coords: [77.6995, 12.9591] },
+  { name: 'whitefield', display: 'Whitefield', coords: [77.7499, 12.9698] },
+  { name: 'electronic city', display: 'Electronic City', coords: [77.6763, 12.8445] },
+  { name: 'indiranagar', display: 'Indiranagar', coords: [77.6408, 12.9793] },
+  { name: 'koramangala', display: 'Koramangala', coords: [77.6234, 12.9345] },
+  { name: 'jayanagar', display: 'Jayanagar', coords: [77.5811, 12.9257] },
+  { name: 'basavanagudi', display: 'Basavanagudi', coords: [77.5657, 12.9406] },
+  { name: 'malleshwaram', display: 'Malleshwaram', coords: [77.5806, 13.0039] },
+  { name: 'rajajinagar', display: 'Rajajinagar', coords: [77.5578, 13.0011] },
+  { name: 'yeshwanthpur', display: 'Yeshwanthpur', coords: [77.5510, 13.0167] },
+  { name: 'hsr layout', display: 'HSR Layout', coords: [77.6479, 12.9081] },
+  { name: 'btm layout', display: 'BTM Layout', coords: [77.6107, 12.9162] },
+  { name: 'banashankari', display: 'Banashankari', coords: [77.5439, 12.9317] },
+  { name: 'kalyan nagar', display: 'Kalyan Nagar', coords: [77.6408, 13.0163] },
+  { name: 'domlur', display: 'Domlur', coords: [77.6408, 12.9611] },
+  { name: 'bellandur', display: 'Bellandur', coords: [77.6806, 12.9257] },
+  { name: 'sarjapur', display: 'Sarjapur', coords: [77.7833, 12.9187] },
+  { name: 'd\'souza layout', display: 'D\'Souza Layout', coords: [77.5946, 12.9716] },
+  { name: 'bharath aikya ward', display: 'Bharath Aikya Ward', coords: [77.5946, 12.9716] },
+  { name: 'bharathi aikya ward', display: 'Bharath Aikya Ward', coords: [77.5946, 12.9716] },
   
-  if (geoCache.has(key)) return geoCache.get(key);
+  // Cities
+  { name: 'bangalore', display: 'Bangalore', coords: [77.5946, 12.9716] },
+  { name: 'bengaluru', display: 'Bengaluru', coords: [77.5946, 12.9716] },
+  { name: 'hyderabad', display: 'Hyderabad', coords: [78.4867, 17.3850] },
+  { name: 'delhi', display: 'Delhi', coords: [77.2090, 28.6139] },
+  { name: 'mumbai', display: 'Mumbai', coords: [72.8777, 19.0760] },
+  { name: 'chennai', display: 'Chennai', coords: [80.2707, 13.0827] },
+  { name: 'pune', display: 'Pune', coords: [73.8567, 18.5204] },
+  { name: 'kolkata', display: 'Kolkata', coords: [88.3639, 22.5726] },
+  { name: 'jaipur', display: 'Jaipur', coords: [75.7873, 26.9124] },
+  { name: 'lucknow', display: 'Lucknow', coords: [80.9462, 26.8467] },
+  { name: 'indore', display: 'Indore', coords: [75.8577, 22.7196] }
+];
+
+// Find location name from coordinates using fallback database
+function findLocationByCoords(coords) {
+  if (!coords || !Array.isArray(coords) || coords.length !== 2) return null;
   
-  try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-      { headers: { 'Accept-Language': 'en' } }
-    );
-    const d = await r.json();
-    const a = d.address || {};
-    const name = a.neighbourhood || a.suburb || a.village || a.city_district ||
-      a.city || a.town || a.road || d.display_name?.split(',')[0] ||
-      `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-    geoCache.set(key, name);
-    return name;
-  } catch {
-    return `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-  }
+  const [lng, lat] = coords;
+  
+  // Find closest match within 0.02 degrees (roughly 2km)
+  const match = FALLBACK_LOCATIONS.find(loc => {
+    const [locLng, locLat] = loc.coords;
+    return Math.abs(locLat - lat) < 0.02 && Math.abs(locLng - lng) < 0.02;
+  });
+  
+  return match ? match.display : null;
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  HOOK
+// ══════════════════════════════════════════════════════════════════
 
 function useLocationName(locationField) {
   const [name, setName] = useState('');
@@ -50,12 +93,21 @@ function useLocationName(locationField) {
       return;
     }
     
-    // Fallback: reverse geocode from coordinates
+    // Try to match coordinates with fallback database
     const coords = locationField.coordinates;
     if (Array.isArray(coords) && coords.length === 2) {
-      console.log('Reverse geocoding:', coords);
-      setName('Loading…');
-      reverseGeocode(coords).then(setName);
+      const fallbackName = findLocationByCoords(coords);
+      if (fallbackName) {
+        console.log('Using fallback match:', fallbackName);
+        setName(fallbackName);
+        return;
+      }
+      
+      // Last resort: show coordinates in readable format
+      const [lng, lat] = coords;
+      const coordString = `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+      console.log('Using coordinate string:', coordString);
+      setName(coordString);
     } else {
       console.log('No coordinates found');
       setName('Unknown location');
@@ -64,6 +116,10 @@ function useLocationName(locationField) {
   
   return name;
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  COMPONENT
+// ══════════════════════════════════════════════════════════════════
 
 export default function RideCard({ ride, onView, onBook, bookingStatus }) {
   // FIXED: Don't render if no seats available
