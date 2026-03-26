@@ -3,9 +3,15 @@ const Ride = require('./rides.model');
 const User = require('../users/users.model');
 
 // ================= CREATE RIDE =================
+// ================= CREATE RIDE =================
 exports.createRide = async (req, res) => {
   try {
     const { pickup, drop, date, time, seatsAvailable, costPerSeat } = req.body;
+
+    // DEBUG: Log what backend receives
+    console.log('=== BACKEND RECEIVED ===');
+    console.log('Pickup received:', pickup);
+    console.log('Drop received:', drop);
 
     const userId = req.user?.userId || req.user?.id;
     const user = await User.findById(userId);
@@ -18,21 +24,27 @@ exports.createRide = async (req, res) => {
       return res.status(403).json({ message: 'KYC not approved' });
     }
 
+    // FIXED: Properly extract address from frontend data
+    // Frontend sends: { coordinates: [lng, lat], address: 'Location Name' }
+    const pickupAddress = pickup?.address || pickup?.label || 'Unknown Location';
+    const dropAddress = drop?.address || drop?.label || 'Unknown Location';
+
+    console.log('Extracted addresses:', { pickupAddress, dropAddress });
+
     const ride = new Ride({
       providerId: userId,
 
-      // ✅ FIX START (only this part changed)
+      // FIXED: Properly save coordinates AND address
       pickup: {
         type: 'Point',
-        coordinates: pickup?.coordinates || [],
-        address: pickup?.address || ''
+        coordinates: Array.isArray(pickup?.coordinates) ? pickup.coordinates : [],
+        address: pickupAddress
       },
       drop: {
         type: 'Point',
-        coordinates: drop?.coordinates || [],
-        address: drop?.address || ''
+        coordinates: Array.isArray(drop?.coordinates) ? drop.coordinates : [],
+        address: dropAddress
       },
-      // ✅ FIX END
 
       date,
       time,
@@ -42,11 +54,17 @@ exports.createRide = async (req, res) => {
 
     await ride.save();
 
+    // DEBUG: Log what was saved
+    console.log('=== RIDE SAVED ===');
+    console.log('Saved pickup:', ride.pickup);
+    console.log('Saved drop:', ride.drop);
+
     res.status(201).json({
       message: 'Ride created successfully',
       ride,
     });
   } catch (error) {
+    console.error('Create ride error:', error);
     res.status(500).json({ message: error.message });
   }
 };

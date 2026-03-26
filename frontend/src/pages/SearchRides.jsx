@@ -163,7 +163,7 @@ export default function SearchRides({ navigate }) {
             </div>
           ) : (
             <div className="rides-stack">
-              {rides.map(ride => {
+              {rides.filter(ride => (ride.seatsAvailable ?? 0) > 0).map(ride => {
                 const bm = bookingMap[ride._id];
                 return (
                   <div key={ride._id}>

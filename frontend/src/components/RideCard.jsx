@@ -1,9 +1,18 @@
 import React, { useState, useEffect } from 'react';
 
 const geoCache = new Map();
-async function reverseGeocode([lng, lat]) {
+
+// FIXED: Properly handle [lng, lat] format from MongoDB and correct display
+async function reverseGeocode(coordinates) {
+  if (!coordinates || !Array.isArray(coordinates) || coordinates.length !== 2) {
+    return 'Unknown location';
+  }
+  
+  const [lng, lat] = coordinates; // MongoDB stores [lng, lat]
   const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+  
   if (geoCache.has(key)) return geoCache.get(key);
+  
   try {
     const r = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
@@ -12,38 +21,65 @@ async function reverseGeocode([lng, lat]) {
     const d = await r.json();
     const a = d.address || {};
     const name = a.neighbourhood || a.suburb || a.village || a.city_district ||
-      a.city || a.town || d.display_name?.split(',')[0] ||
-      `${lat.toFixed(4)}°N ${lng.toFixed(4)}°E`;
+      a.city || a.town || a.road || d.display_name?.split(',')[0] ||
+      `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
     geoCache.set(key, name);
     return name;
   } catch {
-    return `${lat.toFixed(4)}°N ${lng.toFixed(4)}°E`;
+    return `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
   }
 }
 
 function useLocationName(locationField) {
   const [name, setName] = useState('');
+  
   useEffect(() => {
-    if (!locationField) return;
-    if (locationField.address?.trim()) { setName(locationField.address.trim()); return; }
-    if (locationField.coordinates?.length === 2) {
-      setName('…');
-      reverseGeocode(locationField.coordinates).then(setName);
+    if (!locationField) {
+      setName('Unknown location');
+      return;
+    }
+    
+    // DEBUG
+    console.log('useLocationName received:', locationField);
+    
+    // Check if we have a stored address (from new rides)
+    const storedAddress = locationField.address?.trim();
+    if (storedAddress && storedAddress.length > 0 && storedAddress !== 'Unknown Location') {
+      console.log('Using stored address:', storedAddress);
+      setName(storedAddress);
+      return;
+    }
+    
+    // Fallback: reverse geocode from coordinates
+    const coords = locationField.coordinates;
+    if (Array.isArray(coords) && coords.length === 2) {
+      console.log('Reverse geocoding:', coords);
+      setName('Loading…');
+      reverseGeocode(coords).then(setName);
+    } else {
+      console.log('No coordinates found');
+      setName('Unknown location');
     }
   }, [locationField]);
+  
   return name;
 }
 
 export default function RideCard({ ride, onView, onBook, bookingStatus }) {
+  // FIXED: Don't render if no seats available
+  if ((ride.seatsAvailable ?? 0) === 0) {
+    return null;
+  }
+
   const pickupName = useLocationName(ride.pickup);
-  const dropName   = useLocationName(ride.drop);
-  const provider   = ride.providerId;
-  const provName   = typeof provider === 'object' ? (provider?.name || 'Provider') : 'Provider';
+  const dropName = useLocationName(ride.drop);
+  const provider = ride.providerId;
+  const provName = typeof provider === 'object' ? (provider?.name || 'Provider') : 'Provider';
   const provRating = typeof provider === 'object' ? provider?.rating : null;
-  const dateStr    = ride.date
+  const dateStr = ride.date
     ? new Date(ride.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
     : '—';
-  const isLoading  = v => !v || v === '…';
+  const isLoading = v => !v || v === '…' || v === 'Loading…' || v === 'Loading location...';
 
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -53,12 +89,28 @@ export default function RideCard({ ride, onView, onBook, bookingStatus }) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0, overflow: 'hidden' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
-            <span style={{ fontSize: 14, fontWeight: 600, color: isLoading(pickupName) ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.88)', fontStyle: isLoading(pickupName) ? 'italic' : 'normal', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ 
+              fontSize: 14, 
+              fontWeight: 600, 
+              color: isLoading(pickupName) ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.88)', 
+              fontStyle: isLoading(pickupName) ? 'italic' : 'normal', 
+              whiteSpace: 'nowrap', 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis' 
+            }}>
               {pickupName || '…'}
             </span>
             <span style={{ color: 'rgba(255,255,255,0.2)', flexShrink: 0 }}>→</span>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
-            <span style={{ fontSize: 14, fontWeight: 600, color: isLoading(dropName) ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.88)', fontStyle: isLoading(dropName) ? 'italic' : 'normal', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ 
+              fontSize: 14, 
+              fontWeight: 600, 
+              color: isLoading(dropName) ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.88)', 
+              fontStyle: isLoading(dropName) ? 'italic' : 'normal', 
+              whiteSpace: 'nowrap', 
+              overflow: 'hidden', 
+              textOverflow: 'ellipsis' 
+            }}>
               {dropName || '…'}
             </span>
           </div>
@@ -96,7 +148,7 @@ export default function RideCard({ ride, onView, onBook, bookingStatus }) {
             <button className="btn btn-ghost btn-sm" onClick={() => onView?.(ride._id)}>Details</button>
             {bookingStatus === 'pending'
               ? <span className="badge badge-pending" style={{ padding: '6px 12px', fontSize: 12 }}>Requested</span>
-              : <button className="btn btn-primary btn-sm" onClick={() => onBook?.(ride._id)} disabled={!onBook || (ride.seatsAvailable ?? 0) === 0}>Book Seat →</button>
+              : <button className="btn btn-primary btn-sm" onClick={() => onBook?.(ride._id)} disabled={!onBook}>Book Seat →</button>
             }
           </div>
         </div>
