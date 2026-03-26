@@ -1,19 +1,33 @@
+// backend/rides/rides.routes.js
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const controller = require('./rides.controller');
 
-// ✅ ONLY VALID FUNCTIONS
-router.post('/create', auth, controller.createRide);
-router.get('/search', auth, controller.searchRides);
-router.get('/my', auth, controller.getMyRides);
+// All ride routes require authentication
+router.use(auth);
 
-router.post('/:rideId/checklist', auth, controller.submitChecklist);
-router.post('/:rideId/pickup', auth, controller.pickupPassenger);
-router.post('/:rideId/drop', auth, controller.dropPassenger);
+// ── STATIC routes MUST come before /:id wildcard ──────────────────
+router.post('/create', controller.createRide);
+router.get('/search', controller.searchRides);
+router.get('/my', controller.getMyRides);
+router.get('/no-match-suggest', controller.noMatchSuggest);
+router.get('/recurring/:rideId/instances', controller.getRecurringInstances);
 
-router.get('/:id', auth, controller.getRide);
-router.put('/:id', auth, controller.updateRide);
-router.delete('/:id', auth, controller.deleteRide);
+// ── Dynamic /:id routes ───────────────────────────────────────────
+router.get('/:id', controller.getRide);
+router.put('/:id', controller.updateRide);
+router.delete('/:id', controller.deleteRide);
+
+// Trip status flow
+router.post('/:rideId/checklist', controller.submitChecklist);
+router.post('/:rideId/pickup', controller.pickupPassenger);
+router.post('/:rideId/drop', controller.dropPassenger);
+router.post('/:rideId/start', controller.startRide);
+router.post('/:rideId/complete', controller.completeRide);
+router.post('/:rideId/cancel', controller.cancelRide);
+
+// Status
+router.get('/:rideId/status', controller.getRideStatus);
 
 module.exports = router;

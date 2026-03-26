@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as api from '../services/api.js';
-import TripStatusFlow from './TripStatusFlow.jsx';
+import TripStatusFlow from "../components/TripStatusFlow.jsx";
 import './SharedPages.css';
 
 export default function ProviderBookings({ navigate }) {

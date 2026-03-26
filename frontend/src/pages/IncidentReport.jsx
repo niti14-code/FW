@@ -153,6 +153,9 @@ const css = `
   .ir-inc-card::before {
     content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
     background: linear-gradient(180deg, #ef4444, rgba(239,68,68,0.2));
+    border-radius: 16px 0 0 16px;
+    opacity: 0;
+    transition: opacity 0.2s;
   }
   .ir-inc-card.exported::before { background: linear-gradient(180deg, #22c55e, rgba(34,197,94,0.2)); }
   .ir-inc-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
@@ -212,25 +215,14 @@ const css = `
   .ir-tab.active { background: #ef4444; color: #fff; box-shadow: 0 2px 12px rgba(239,68,68,0.3); }
 `;
 
-const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000';
-
-function getToken() {
-  return localStorage.getItem('cr_token') || '';
-}
-
-async function apiFetch(path, opts = {}) {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...opts,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${getToken()}`,
-      ...(opts.headers || {}),
-    },
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.message || data.error || `Error ${res.status}`);
-  return data;
-}
+// FIXED: Import from api.js instead of duplicating
+import { 
+  API_BASE, 
+  getToken, 
+  apiFetch,
+  getMyBookings,
+  getRide 
+} from '../services/api.js';
 
 const TYPES = [
   { key: 'accident',      label: '🚨 Accident' },
@@ -260,7 +252,7 @@ export default function IncidentReport({ navigate }) {
   const [incidents, setIncidents] = useState([]);
   const [pastRides, setPastRides]     = useState([]);
   const [ridesLoading, setRidesLoading] = useState(false);
-  const [selectedRide, setSelectedRide] = useState(null); // { rideId, label }
+  const [selectedRide, setSelectedRide] = useState(null);
 
   const [form, setForm] = useState({
     type: 'other', description: '', severity: 'medium', rideDescription: '',
@@ -290,36 +282,42 @@ export default function IncidentReport({ navigate }) {
   useEffect(() => {
     if (tab !== 'report') return;
     setRidesLoading(true);
-    const endpoints = ['/booking/my', '/booking/my-bookings'];
+    
+    // FIXED: Use only the correct endpoint, remove phantom routes
     (async () => {
-      for (const url of endpoints) {
-        try {
-          const res = await fetch(`${API_BASE}${url}`, {
-            headers: { Authorization: `Bearer ${getToken()}` },
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const list = Array.isArray(data) ? data : (data.bookings || data.data || []);
-            // Enrich with ride details if needed
-            const enriched = await Promise.all(list.filter(b => b.status !== 'cancelled').map(async b => {
-              const ride = b.rideId;
-              if (!ride) return b;
-              const prov = ride.providerId;
-              if (prov && typeof prov === 'object' && prov.name) return b;
-              const rideId = typeof ride === 'object' ? (ride._id || ride.id) : ride;
-              if (!rideId) return b;
-              try {
-                const r = await fetch(`${API_BASE}/api/ride/${rideId}`, { headers: { Authorization: `Bearer ${getToken()}` } });
-                if (r.ok) { const rd = await r.json(); return { ...b, rideId: rd.ride || rd }; }
-              } catch (_) {}
-              return b;
-            }));
-            setPastRides(enriched);
-            break;
-          }
-        } catch (_) {}
+      try {
+        // FIXED: Use imported API function instead of raw fetch
+        const data = await getMyBookings();
+        const list = Array.isArray(data) ? data : (data.bookings || data.data || []);
+        
+        // Enrich with ride details if needed
+        const enriched = await Promise.all(
+          list.filter(b => b.status !== 'cancelled').map(async (b) => {
+            const ride = b.rideId;
+            if (!ride) return b;
+            const prov = ride.providerId;
+            if (prov && typeof prov === 'object' && prov.name) return b;
+            const rideId = typeof ride === 'object' ? (ride._id || ride.id) : ride;
+            if (!rideId) return b;
+            
+            try {
+              // FIXED: Use imported API function with correct URL
+              const rideData = await getRide(rideId);
+              return { ...b, rideId: rideData.ride || rideData };
+            } catch (_) {}
+            return b;
+          })
+        );
+        
+        setPastRides(enriched);
+        if (enriched.length === 0) {
+          setRidesError('No past rides found. Describe the ride below instead.');
+        }
+      } catch (err) {
+        setRidesError('Could not load your past rides. Please try again.');
+      } finally {
+        setRidesLoading(false);
       }
-      setRidesLoading(false);
     })();
   }, [tab]);
 
@@ -335,7 +333,7 @@ export default function IncidentReport({ navigate }) {
       location = await new Promise((resolve, reject) =>
         navigator.geolocation.getCurrentPosition(
           p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-          () => resolve(undefined), // don't block on location denial
+          () => resolve(undefined),
           { timeout: 5000 }
         )
       );
@@ -350,10 +348,12 @@ export default function IncidentReport({ navigate }) {
         rideId:          selectedRide?.rideId || undefined,
         location,
       };
+      
       const res = await apiFetch('/incidents/report', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      
       setIncidents(prev => [res.incident, ...prev]);
       setForm({ type: 'other', description: '', severity: 'medium', rideDescription: '' });
       setSelectedRide(null);

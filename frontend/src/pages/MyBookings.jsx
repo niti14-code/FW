@@ -69,23 +69,7 @@ export default function MyBookings({ navigate }) {
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
 
-    // Socket listener for OTP requests from providers
-    const socket = window.socket;
-    if (socket) {
-      const handleOtpRequested = (data) => {
-        alert(`📱 OTP Requested!\n\nRide ID: ${data.rideId}\nYour OTP: ${data.otp}\nProvider: ${data.providerName}\n\nPlease share this OTP with your provider when they arrive.`);
-      };
 
-      socket.on('otpRequested', handleOtpRequested);
-      socket.on('otpVerified', (data) => {
-        alert(`✅ OTP Verified!\n\nRide ID: ${data.rideId}\nStatus: ${data.message}`);
-      });
-
-      return () => {
-        socket.off('otpRequested', handleOtpRequested);
-        socket.off('otpVerified');
-      };
-    }
   }, []);
 
   const bookingIcon = { pending:'⏳', accepted:'✅', rejected:'❌' };

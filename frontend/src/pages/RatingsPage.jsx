@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
 
+// FIXED: Import API_BASE and all API functions from api.js (single source of truth)
+import { 
+  API_BASE, 
+  getToken, 
+  getMyBookings, 
+  getRide 
+} from '../services/api.js';
+
 /* ─── Inline styles (drop your RatingsPage.css import if you use this) ─── */
 const css = `
   @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
@@ -374,9 +382,6 @@ const css = `
   }
 `;
 
-/* ─── Config ──────────────────────────────────────────────────────────────── */
-const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000';
-
 /* ─── Helpers ─────────────────────────────────────────────────────────────── */
 function Stars({ value, onChange, size = 20 }) {
   const [hover, setHover] = useState(0);
@@ -412,12 +417,7 @@ function formatDate(iso) {
 }
 
 /* ─── Main Component ──────────────────────────────────────────────────────── */
-export default function RatingsPage({ userId: userIdProp, authToken }) {
-
-  function getToken() {
-    if (authToken) return authToken;
-    return localStorage.getItem('cr_token') || '';
-  }
+export default function RatingsPage({ userId: userIdProp }) {
 
   const [ratings, setRatings]       = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -426,7 +426,6 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
   const [showForm, setShowForm]     = useState(false);
   const [form, setForm]             = useState({ rideNote: '', rating: 0, comment: '' });
 
-  // The ride the user picks — carries providerId + providerName + route label
   const [selectedRide, setSelectedRide] = useState(null);
   const [pastRides, setPastRides]       = useState([]);
   const [ridesLoading, setRidesLoading] = useState(false);
@@ -436,9 +435,8 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
   const [submitError, setSubmitError] = useState('');
   const [newlyAdded, setNewlyAdded]   = useState(null);
 
-  // reviewedUser comes from prop (profile page) OR from the selected past ride
   const reviewedUserId = userIdProp || selectedRide?.providerId;
-  const targetUserId   = userIdProp; // for the public ratings feed shown on this page
+  const targetUserId   = userIdProp;
 
   /* ── Fetch this profile's ratings ── */
   useEffect(() => {
@@ -450,7 +448,9 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
     setLoading(true);
     setFetchError('');
     try {
-      const res = await fetch(`${API_BASE}/ratings/${targetUserId}`);
+      const token = getToken();
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch(`${API_BASE}/ratings/${targetUserId}`, { headers });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       setRatings(await res.json());
     } catch (err) {
@@ -466,33 +466,14 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
     setRidesLoading(true);
     setRidesError('');
     try {
-      const token = getToken();
-      const headers = { Authorization: `Bearer ${token}` };
-
-      // Try multiple common booking endpoint patterns
-      let list = [];
-      const endpoints = [
-        `${API_BASE}/booking/my`,
-        `${API_BASE}/booking/my-bookings`,
-        `${API_BASE}/booking/seeker`,
-      ];
-
-      for (const url of endpoints) {
-        const res = await fetch(url, { headers });
-        if (res.ok) {
-          const data = await res.json();
-          list = Array.isArray(data) ? data
-            : (data.bookings || data.data || []);
-          break;
-        }
-      }
-
-      // Keep all statuses so user can rate any past ride (not just completed)
-      // Filter out rides the user themselves created (provider bookings)
+      // FIXED: Use imported API function instead of raw fetch with phantom routes
+      const data = await getMyBookings();
+      const list = Array.isArray(data) ? data : (data.bookings || data.data || []);
+      
+      // Filter out cancelled bookings
       const filtered = list.filter(b => b.status !== 'cancelled');
 
-      // For any booking where providerId isn't populated with a name,
-      // fetch the ride detail to get the provider name
+      // Enrich with ride details if needed
       const enriched = await Promise.all(filtered.map(async (booking) => {
         const ride = booking.rideId;
         if (!ride) return booking;
@@ -501,17 +482,13 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
         const alreadyHasName = provider && typeof provider === 'object' && provider.name;
         if (alreadyHasName) return booking;
 
-        // Provider not populated — fetch the ride to get it
         const rideId = typeof ride === 'object' ? (ride._id || ride.id) : ride;
         if (!rideId) return booking;
 
         try {
-          const rideRes = await fetch(`${API_BASE}/ride/${rideId}`, { headers });
-          if (rideRes.ok) {
-            const rideData = await rideRes.json();
-            const fullRide = rideData.ride || rideData;
-            return { ...booking, rideId: fullRide };
-          }
+          const rideData = await getRide(rideId);
+          const fullRide = rideData.ride || rideData;
+          return { ...booking, rideId: fullRide };
         } catch (_) {}
         return booking;
       }));
@@ -521,7 +498,7 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
       if (enriched.length === 0) {
         setRidesError('No past rides found. Complete a booking first to leave a review.');
       }
-    } catch {
+    } catch (err) {
       setRidesError('Could not load your past rides. Please try again.');
     } finally {
       setRidesLoading(false);
@@ -532,7 +509,7 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
   async function handleSubmit() {
     if (!form.rating || !reviewedUserId) return;
 
-    const token   = getToken();
+    const token = getToken();
     const payload = {
       reviewedUser: reviewedUserId,
       rating:       form.rating,
@@ -541,8 +518,6 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
         form.comment,
       ].filter(Boolean).join(' — ') || undefined,
     };
-
-    console.log('[RatingsPage] payload:', payload);
 
     if (!token) { setSubmitError('You must be logged in to submit a review.'); return; }
 
@@ -666,22 +641,17 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
                       const ride     = booking.rideId || booking;
                       const provider = ride.providerId;
 
-                      // Mongoose ObjectId objects have a .toString() method
-                      // Handle: plain string, ObjectId object, or populated {_id, name} object
                       let provId   = '';
                       let provName = 'Unknown Provider';
 
                       if (provider && typeof provider === 'object') {
-                        // Populated object: { _id: ObjectId, name: "..." }
                         if (provider.name) provName = provider.name;
                         const rawId = provider._id || provider.id || provider;
                         provId = rawId?.toString ? rawId.toString() : String(rawId);
                       } else if (provider) {
-                        // Plain ObjectId string
                         provId = provider.toString ? provider.toString() : String(provider);
                       }
 
-                      // Fallback: try top-level booking fields
                       if (provName === 'Unknown Provider' && booking.providerName) provName = booking.providerName;
                       if (!provId && booking.providerId) provId = String(booking.providerId);
 
@@ -697,7 +667,6 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
                         <div key={booking._id || i}
                           className={`rp-ride-option${isSelected ? ' rp-ride-selected' : ''}`}
                           onClick={() => {
-                            console.log('[RidePicker] provId:', provId, '| provName:', provName);
                             setSelectedRide({
                               bookingId:    booking._id || i,
                               providerId:   provId,
@@ -772,7 +741,6 @@ export default function RatingsPage({ userId: userIdProp, authToken }) {
               const name = r.reviewer?.name || r.reviewer || 'Anonymous';
               const isNew = r._id === newlyAdded;
 
-              // Split "Route: X — comment" back into parts for clean display
               let routeLabel = '';
               let commentText = r.comment || '';
               if (commentText.startsWith('Route:')) {

@@ -2,12 +2,10 @@
 //  API SERVICE  —  frontend/src/services/api.js
 // ══════════════════════════════════════════════════════════════════
 
-// Strip any accidental trailing /api from the env value
-//const BASE = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '');
-//const BASE = (import.meta.env.VITE_API_URL || '') + '/api';
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+export const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
+const BASE = API_BASE;
 // ── Token / User helpers ──────────────────────────────────────────
-export const getToken   = ()  => localStorage.getItem('cr_token');
+export const getToken   = ()  => localStorage.getItem('cr_token') || ''
 export const setToken   = (t) => localStorage.setItem('cr_token', t);
 export const removeToken= ()  => localStorage.removeItem('cr_token');
 
@@ -35,47 +33,48 @@ const request = async (path, options = {}) => {
 // ══════════════════════════════════════════════════════════════════
 //  LOCATION SEARCH (OpenStreetMap Nominatim)
 // ══════════════════════════════════════════════════════════════════
+// frontend/src/services/api.js - CORRECTED (searchLocation function only)
 export const searchLocation = async (query) => {
   try {
     console.log('Searching for location:', query);
     
-    // Always use fallback for now to ensure reliability
-    console.log('Using fallback locations for reliability');
-    return getFallbackLocations(query);
-    
-    // Try API first (commented out for reliability)
-    /*
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=in`,
-      {
-        headers: {
-          'User-Agent': 'CampusRide/1.0'
+    // FIXED: Try API first, fallback only on failure
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=in`,
+        {
+          headers: {
+            'User-Agent': 'CampusRide/1.0'
+          }
         }
+      );
+      
+      if (!response.ok) {
+        console.log('API failed, using fallbacks');
+        return getFallbackLocations(query);
       }
-    );
-    
-    if (!response.ok) {
-      console.log('API failed, using fallbacks');
+      
+      const data = await response.json();
+      console.log('API response:', data);
+      
+      // If we get results, return them
+      if (data && data.length > 0) {
+        return data.map(place => ({
+          display_name: place.display_name,
+          lat: parseFloat(place.lat),
+          lng: parseFloat(place.lon),
+          label: place.display_name.split(',')[0]
+        }));
+      }
+      
+      // If no results, return fallbacks
+      console.log('No results, using fallbacks');
+      return getFallbackLocations(query);
+      
+    } catch (apiError) {
+      console.log('API error, using fallbacks:', apiError);
       return getFallbackLocations(query);
     }
-    
-    const data = await response.json();
-    console.log('API response:', data);
-    
-    // If we get results, return them
-    if (data && data.length > 0) {
-      return data.map(place => ({
-        display_name: place.display_name,
-        lat: parseFloat(place.lat),
-        lng: parseFloat(place.lon),
-        label: place.display_name.split(',')[0]
-      }));
-    }
-    
-    // If no results, return fallbacks
-    console.log('No results, using fallbacks');
-    return getFallbackLocations(query);
-    */
     
   } catch (error) {
     console.error('Location search failed:', error);
@@ -495,22 +494,6 @@ export const completeRide = (rideId) =>
 export const cancelRide   = (rideId, reason) =>
   request(`/ride/${rideId}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) });
 
-// ── OTP verification system (like Rapido/Uber/Ola)
-export const requestOtpFromSeeker = (rideId) =>
-  request(`/ride/${rideId}/request-otp`, { method: 'POST' });
-
-export const verifyOtpFromSeeker = (rideId, otp) =>
-  request(`/ride/${rideId}/verify-otp-from-seeker`, { method: 'POST', body: JSON.stringify({ otp }) });
-
-export const generateOtp = (rideId) =>
-  request(`/ride/${rideId}/generate-otp`, { method: 'POST' });
-
-export const verifyOtp = (rideId, otp) =>
-  request(`/ride/${rideId}/verify-otp`, { method: 'POST', body: JSON.stringify({ otp }) });
-
-export const getOtpStatus = (rideId) =>
-  request(`/ride/${rideId}/otp-status`);
-
 // ══════════════════════════════════════════════════════════════════
 //  BOOKINGS
 // ══════════════════════════════════════════════════════════════════
@@ -566,3 +549,24 @@ export const getAdminSetting = (key) => request(`/admin/settings/${key}`);
 //  OTHER EXISTING SERVICES (unchanged)
 // ══════════════════════════════════════════════════════════════════
 export const getRideStatus = (rideId) => request(`/ride/${rideId}/status`);
+
+export async function apiFetch(url, options = {}) {
+  const token = localStorage.getItem("token");
+
+  const res = await fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...options.headers,
+    },
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data.message || "API Error");
+  }
+
+  return data;
+}
