@@ -1,4 +1,4 @@
-// backend/server.js - CORRECTED
+// backend/server.js - SOCKET.IO FIX
 const express = require('express');
 const mongoose = require("mongoose");
 const cors = require('cors');
@@ -13,10 +13,12 @@ connectDB();
 const app = express();
 const server = http.createServer(app);
 
+// Make io globally available for controllers
+global.io = null;
+
 // ==========================================
-// 1. CORS
+// 1. CORS - Enhanced for Socket.IO
 // ==========================================
-// Build allowed origins from env + hardcoded dev origins
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   'https://fw-mq8p.onrender.com',
@@ -28,14 +30,12 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) !== -1) {
       return callback(null, true);
     }
-    console.log('⚠️ CORS request from unlisted origin (allowing):', origin);
-    // In production you may want to block; for now allow all to avoid deploy issues
-    return callback(null, true);
+    console.log('⚠️ CORS request from:', origin);
+    return callback(null, true); // Allow all for now
   },
   credentials: true,
   methods: ['GET','POST','PUT','DELETE','OPTIONS','PATCH'],
@@ -57,20 +57,82 @@ app.use((req, res, next) => {
 });
 
 // ==========================================
-// 4. SOCKET.IO
+// 4. SOCKET.IO - FIXED CONFIGURATION
 // ==========================================
 const io = socketIo(server, {
-  cors: { origin: "*", methods: ["GET","POST"] },
-  transports: ['websocket','polling']
+  cors: { 
+    origin: allowedOrigins.length > 0 ? allowedOrigins : "*", 
+    methods: ["GET","POST"],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'], // Allow both, prefer websocket
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  allowEIO3: true, // Allow Engine.IO v3 clients (backward compatibility)
+  maxHttpBufferSize: 1e6
 });
 
+global.io = io;
 app.set("io", io);
 
-io.on("connection", (socket) => {
-  console.log("User Connected:", socket.id);
+// Debug: Log all connection errors
+io.engine.on("connection_error", (err) => {
+  console.log('Socket.IO Connection Error:', {
+    code: err.code,
+    message: err.message,
+    context: err.context
+  });
+});
 
+// Track connected users
+const connectedUsers = new Map();
+
+io.on("connection", (socket) => {
+  console.log("✅ Socket Connected:", socket.id, "Transport:", socket.conn.transport.name);
+
+  // Send immediate confirmation
+  socket.emit('connected', { socketId: socket.id, timestamp: new Date().toISOString() });
+
+  // User authentication and room joining
+  socket.on('authenticate', (data) => {
+    try {
+      const { userId, userType } = data;
+      if (userId) {
+        connectedUsers.set(userId, {
+          socketId: socket.id,
+          userType,
+          joinedAt: new Date()
+        });
+        socket.userId = userId;
+        socket.userType = userType;
+        
+        // Join personal room
+        socket.join(`user-${userId}`);
+        
+        // Join role-based room
+        if (userType) {
+          socket.join(`${userType}s`); // 'seekers' or 'providers'
+        }
+        
+        console.log(`✅ User ${userId} (${userType}) authenticated`);
+        socket.emit('authenticated', { success: true, userId, userType });
+      }
+    } catch (error) {
+      console.error('Socket authentication error:', error);
+      socket.emit('authenticated', { success: false, error: error.message });
+    }
+  });
+
+  // Provider joins their provider room
+  socket.on("join-provider", (providerId) => {
+    socket.join(`provider-${providerId}`);
+    console.log(`Provider ${providerId} joined their room`);
+  });
+
+  // Join ride room for chat/updates
   socket.on("join-ride", (rideId) => {
     socket.join(`ride-${rideId}`);
+    console.log(`Socket ${socket.id} joined ride-${rideId}`);
   });
 
   socket.on("send-message", async (data) => {
@@ -87,8 +149,20 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log("User Disconnected:", socket.id);
+  // Handle transport upgrade
+  socket.conn.on("upgrade", () => {
+    console.log(`Socket ${socket.id} upgraded to ${socket.conn.transport.name}`);
+  });
+
+  socket.on("disconnect", (reason) => {
+    console.log("❌ Socket Disconnected:", socket.id, "Reason:", reason);
+    // Remove from connected users
+    for (const [userId, data] of connectedUsers.entries()) {
+      if (data.socketId === socket.id) {
+        connectedUsers.delete(userId);
+        break;
+      }
+    }
   });
 });
 
@@ -98,30 +172,37 @@ io.on("connection", (socket) => {
 app.get('/', (req, res) => {
   res.json({
     message: 'FreeWheels API is running!',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    socketConnections: connectedUsers.size
   });
 });
 
 app.get('/health', (req, res) => {
   res.json({
     status: 'OK',
-    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected'
+    database: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
+    socketConnections: connectedUsers.size
+  });
+});
+
+// Socket.IO test endpoint
+app.get('/socket-test', (req, res) => {
+  res.json({
+    socketIoVersion: require('socket.io/package.json').version,
+    activeConnections: connectedUsers.size,
+    transports: ['websocket', 'polling']
   });
 });
 
 // ==========================================
-// 6. ROUTES - ALL CONSISTENTLY PREFIXED WITH /api
+// 6. ROUTES
 // ==========================================
-
-// AUTH
 const authRoutes = require('./auth/auth.routes');
 app.use('/api/auth', authRoutes);
 
-// USERS
 const usersRoutes = require('./users/users.routes');
 app.use('/api/users', usersRoutes);
 
-// FEATURES - All prefixed with /api for consistency
 const ridesRoutes = require('./rides/rides.routes');
 const bookingsRoutes = require('./bookings/bookings.routes');
 const ratingsRoutes = require('./ratings/ratings.routes');
@@ -133,8 +214,8 @@ const alertsRoutes = require('./alerts/alerts.routes');
 const sosRoutes = require('./sos/sos.routes');
 const incidentsRoutes = require('./incidents/incidents.routes');
 const locationRoutes = require('./location/location.routes');
+const notificationsRoutes = require('./notifications/notifications.routes');
 
-// Add this with your other app.use routes
 app.use('/api/location', locationRoutes);
 app.use('/api/ride', ridesRoutes);
 app.use('/api/booking', bookingsRoutes);
@@ -146,9 +227,10 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/alerts', alertsRoutes);
 app.use('/api/sos', sosRoutes);
 app.use('/api/incidents', incidentsRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // ==========================================
-// 7. 404 HANDLER
+// 7. ERROR HANDLERS
 // ==========================================
 app.use((req, res) => {
   console.log(`❌ 404 - Not Found: ${req.method} ${req.originalUrl}`);
@@ -159,18 +241,16 @@ app.use((req, res) => {
   });
 });
 
-// ==========================================
-// 8. ERROR HANDLER
-// ==========================================
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err.message);
   res.status(500).json({ error: err.message });
 });
 
 // ==========================================
-// 9. START SERVER
+// 8. START SERVER
 // ==========================================
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 Socket.IO ready with transports: websocket, polling`);
 });

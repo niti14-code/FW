@@ -1,6 +1,7 @@
 const Alert = require('./alerts.model');
 const Ride = require('../rides/rides.model');
 const User = require('../users/users.model');
+const Notification = require('../notifications/notifications.model');
 
 // Create new alert
 exports.createAlert = async (req, res) => {
@@ -82,7 +83,6 @@ exports.deleteAlert = async (req, res) => {
   }
 };
 
-// Check for matches (internal function)
 // Check for matches (internal function) - FIXED
 const checkForMatches = async (alert) => {
   try {
@@ -127,7 +127,7 @@ const checkForMatches = async (alert) => {
       const alertDropLat = alert.drop.coordinates[1];
       
       // Calculate distance using Haversine formula
-      const distance = calculateDistance(dropLat, dropLng, alertDropLat, alertDropLng);
+      const distance = calculateDistance(dropLat, dropLng, alertDropLng, alertDropLng);
       return distance <= alert.dropRadius;
     });
     
@@ -214,6 +214,93 @@ exports.processAllAlerts = async () => {
     return { processed: activeAlerts.length };
   } catch (error) {
     console.error('Alert processing error:', error);
+    throw error;
+  }
+};
+
+// NEW: Check for low availability and notify matching alerts
+exports.checkLowAvailabilityAndNotify = async (ride, remainingSeats) => {
+  try {
+    if (remainingSeats > 2) return; // Only notify when 2 or fewer seats left
+    
+    // Find all active alerts that match this ride's route
+    const matchingAlerts = await Alert.find({
+      isActive: true,
+      $and: [
+        {
+          pickup: {
+            $near: {
+              $geometry: ride.pickup,
+              $maxDistance: 10000 // 10km radius for alert matching
+            }
+          }
+        },
+        {
+          date: {
+            $gte: new Date(ride.date.setHours(0,0,0,0)),
+            $lt: new Date(ride.date.setHours(23,59,59,999))
+          }
+        }
+      ]
+    }).populate('userId', 'name email fcmToken');
+    
+    // Filter by drop distance manually
+    const alertsToNotify = matchingAlerts.filter(alert => {
+      if (!alert.drop || !alert.drop.coordinates) return false;
+      const distance = calculateDistance(
+        ride.drop.coordinates[1], ride.drop.coordinates[0],
+        alert.drop.coordinates[1], alert.drop.coordinates[0]
+      );
+      return distance <= alert.dropRadius;
+    });
+    
+    // Create urgent notifications for each matching alert
+    const notifications = [];
+    for (const alert of alertsToNotify) {
+      const notification = new Notification({
+        userId: alert.userId._id,
+        userType: 'seeker',
+        type: 'URGENT_AVAILABILITY',
+        title: `Only ${remainingSeats} seat${remainingSeats > 1 ? 's' : ''} left! 🔥`,
+        body: `Hurry! Ride from ${ride.pickup.name || 'pickup'} to ${ride.drop.name || 'drop'} has only ${remainingSeats} seat${remainingSeats > 1 ? 's' : ''} remaining. Book now!`,
+        data: {
+          rideId: ride._id,
+          remainingSeats,
+          urgency: 'critical',
+          pickup: ride.pickup,
+          drop: ride.drop
+        },
+        priority: 'critical',
+        channels: alert.notifyPush ? ['push', 'in_app'] : ['in_app'],
+        expiresAt: new Date(Date.now() + 3600000) // Expires in 1 hour
+      });
+      
+      await notification.save();
+      notifications.push(notification);
+      
+      // Send real-time socket notification if user is online
+      const io = global.io;
+      if (io) {
+        io.to(`user-${alert.userId._id}`).emit('urgent-availability', {
+          notification: notification.toObject(),
+          ride: {
+            _id: ride._id,
+            pickup: ride.pickup,
+            drop: ride.drop,
+            date: ride.date,
+            time: ride.time,
+            price: ride.price,
+            seatsAvailable: remainingSeats,
+            provider: ride.providerId
+          }
+        });
+      }
+    }
+    
+    console.log(`[URGENT] Sent ${notifications.length} low availability notifications for ride ${ride._id}`);
+    return notifications;
+  } catch (error) {
+    console.error('Error in checkLowAvailabilityAndNotify:', error);
     throw error;
   }
 };

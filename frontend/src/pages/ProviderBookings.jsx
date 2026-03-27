@@ -1,38 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as api from '../services/api.js';
-import io from 'socket.io-client';
+import { useSocket } from '../hooks/useSocket.js'; // ADD THIS
 import TripStatusFlow from "../components/TripStatusFlow.jsx";
 import './SharedPages.css';
 
 export default function ProviderBookings({ navigate }) {
   const { user } = useAuth();
 
-  // Role validation: Only 'provider' or 'both' can view ride requests
   const isProvider = user?.role === 'provider' || user?.role === 'both';
   if (!isProvider) {
     return (
       <div className="narrow-wrap fade-up text-center" style={{paddingTop:80}}>
         <div style={{fontSize:64}}>🚫</div>
         <h2 className="heading mt-20" style={{fontSize:28}}>Access Denied</h2>
-        <p className="text-muted mt-8">Only providers can view ride requests. Your current role: <strong>{user?.role || 'unknown'}</strong></p>
+        <p className="text-muted mt-8">Only providers can view ride requests.</p>
         <button className="btn btn-primary btn-lg mt-32" onClick={() => navigate('dashboard')}>
           Back to Dashboard
         </button>
       </div>
     );
   }
-  const [myRides,  setMyRides]  = useState([]);
+
+  const [myRides, setMyRides] = useState([]);
   const [selected, setSelected] = useState(null);
   const [selectedRide, setSelectedRide] = useState(null);
   const [bookings, setBookings] = useState([]);
-  const [ridesLoading,   setRidesLoading]   = useState(true);
+  const [ridesLoading, setRidesLoading] = useState(true);
   const [bookingsLoading, setBookingsLoading] = useState(false);
-  const [error,    setError]    = useState('');
-  const [actionMap, setActionMap] = useState({});
-  const [socket, setSocket] = useState(null);
+  const [error, setError] = useState('');
+  const [actionMap, setActionMap] = useState([]);
 
-  // FIXED: Extracted fetch function for reuse
+  // FIXED: Use universal socket hook
+  const { 
+    socket, 
+    connected, 
+    notifications, 
+    clearNotifications 
+  } = useSocket(
+    user?._id || user?.userId,
+    'provider'
+  );
+
+  // Fetch rides function
   const fetchRides = async () => {
     try {
       const r = await api.getMyRides();
@@ -41,7 +51,6 @@ export default function ProviderBookings({ navigate }) {
         loadBookings(r[0]._id);
         setSelectedRide(r[0]);
       } else if (selectedRide) {
-        // Update selected ride data
         const updated = r.find(x => x._id === selectedRide._id);
         if (updated) setSelectedRide(updated);
       }
@@ -50,20 +59,31 @@ export default function ProviderBookings({ navigate }) {
     }
   };
 
+  // Initial load
   useEffect(() => {
     fetchRides().finally(() => setRidesLoading(false));
+  }, []);
 
-    // FIXED: Setup socket
-    const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
-    setSocket(newSocket);
+  // FIXED: Handle socket notifications
+  useEffect(() => {
+    if (notifications.length === 0) return;
 
-    // Join all my rides rooms
-    newSocket.on('connect', () => {
-      console.log('Provider socket connected');
+    // Process new notifications
+    notifications.forEach(notif => {
+      if (notif.type === 'new-booking' || notif.notification?.type === 'BOOKING_REQUEST') {
+        // Refresh bookings for the relevant ride
+        const rideId = notif.data?.rideId || notif.booking?.ride?._id;
+        if (rideId && selected === rideId) {
+          loadBookings(rideId);
+        }
+        // Show toast/alert
+        alert(`🎉 New booking request from ${notif.data?.seekerName || 'a seeker'}!`);
+      }
     });
 
-    return () => newSocket.disconnect();
-  }, []);
+    // Clear processed notifications
+    clearNotifications();
+  }, [notifications, selected, clearNotifications]);
 
   const loadBookings = async (rideId) => {
     setSelected(rideId);
@@ -89,13 +109,10 @@ export default function ProviderBookings({ navigate }) {
     }
   };
 
-  // FIXED: Handle ride cancellation with socket notification
   const handleCancelRide = async (rideId, reason) => {
     try {
       await api.cancelRide(rideId, reason);
-      
-      // Emit socket event to notify seekers
-      if (socket) {
+      if (socket && connected) {
         socket.emit('join-ride', rideId);
         socket.emit('provider-cancelled', {
           rideId: rideId,
@@ -103,8 +120,6 @@ export default function ProviderBookings({ navigate }) {
           cancelledAt: new Date()
         });
       }
-      
-      // Refresh rides list
       await fetchRides();
       alert('Ride cancelled. All seekers have been notified.');
     } catch (e) {
@@ -112,22 +127,71 @@ export default function ProviderBookings({ navigate }) {
     }
   };
 
-  const pending  = bookings.filter(b => b.status === 'pending');
+  // FIXED: Manual refresh button when socket is disconnected
+  const manualRefresh = () => {
+    if (selected) loadBookings(selected);
+  };
+
+  const pending = bookings.filter(b => b.status === 'pending');
   const resolved = bookings.filter(b => b.status !== 'pending');
 
   return (
     <div className="page-wrap fade-up">
       <p className="eyebrow mb-16">Provider</p>
       <h1 className="heading mb-8" style={{fontSize:30}}>Manage Booking Requests</h1>
-      <p className="text-muted mb-24 text-sm">Accept or reject incoming requests for your posted rides.</p>
+      
+      {/* FIXED: Connection status with manual refresh */}
+      <div style={{ 
+        padding: '8px 16px', 
+        borderRadius: 8, 
+        marginBottom: 16,
+        background: connected ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+        color: connected ? '#86efac' : '#fca5a5',
+        fontSize: 12,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between'
+      }}>
+        <span style={{display: 'flex', alignItems: 'center', gap: 8}}>
+          <span style={{fontSize: 16}}>{connected ? '🟢' : '🔴'}</span>
+          {connected ? 'Real-time updates active' : 'Offline mode - click refresh to update'}
+        </span>
+        {!connected && (
+          <button 
+            onClick={manualRefresh}
+            className="btn btn-ghost btn-sm"
+            style={{padding: '4px 12px', fontSize: 11}}
+          >
+            🔄 Refresh
+          </button>
+        )}
+      </div>
 
       {error && <div className="alert alert-error mb-16">{error}</div>}
 
+      {/* Notification banner for new bookings */}
+      {notifications.length > 0 && (
+        <div className="alert alert-success mb-16" style={{animation: 'slideIn 0.3s ease'}}>
+          <strong>🎉 New booking request!</strong>
+          <button 
+            onClick={() => { clearNotifications(); manualRefresh(); }}
+            className="btn btn-primary btn-sm ml-12"
+          >
+            View
+          </button>
+        </div>
+      )}
+
       <div className="pb-layout">
-        {/* Ride selector sidebar */}
+        {/* Sidebar */}
         <div className="pb-sidebar">
           <div className="card">
-            <div className="card-header"><span className="card-title">Your Rides</span></div>
+            <div className="card-header">
+              <span className="card-title">Your Rides</span>
+              {!connected && (
+                <span style={{fontSize: 10, color: '#fca5a5'}}> (offline)</span>
+              )}
+            </div>
             {ridesLoading ? (
               <div className="card-body sk-list">
                 {[1,2].map(i => <div key={i} className="skeleton skeleton-text" />)}
@@ -135,7 +199,9 @@ export default function ProviderBookings({ navigate }) {
             ) : myRides.length === 0 ? (
               <div className="card-body">
                 <p className="text-muted text-sm">No rides posted yet.</p>
-                <button className="btn btn-primary btn-sm mt-12" onClick={() => navigate('create-ride')}>Post a Ride</button>
+                <button className="btn btn-primary btn-sm mt-12" onClick={() => navigate('create-ride')}>
+                  Post a Ride
+                </button>
               </div>
             ) : (
               <div className="pb-ride-list">
@@ -143,11 +209,15 @@ export default function ProviderBookings({ navigate }) {
                   const dateStr = new Date(r.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'});
                   const isCancelled = r.status === 'cancelled';
                   return (
-                    <button key={r._id}
+                    <button 
+                      key={r._id}
                       className={`pb-ride-item ${selected === r._id ? 'active' : ''} ${isCancelled ? 'cancelled' : ''}`}
-                      onClick={() => { loadBookings(r._id); setSelectedRide(r); }}>
+                      onClick={() => { loadBookings(r._id); setSelectedRide(r); }}
+                    >
                       <div className="pbr-date">{dateStr} · {r.time}</div>
-                      <div className="pbr-seats text-dim text-xs">{r.seatsAvailable} seats · ₹{r.costPerSeat}</div>
+                      <div className="pbr-seats text-dim text-xs">
+                        {r.seatsAvailable} seats · ₹{r.costPerSeat}
+                      </div>
                       <div className="pbr-seats text-dim text-xs" style={{marginTop:2, color: isCancelled ? '#f4a0a0' : 'inherit'}}>
                         Status: {r.status}
                       </div>
@@ -158,8 +228,6 @@ export default function ProviderBookings({ navigate }) {
             )}
           </div>
 
-          
-          {/* Trip status flow for selected ride */}
           {selectedRide && selectedRide.status !== 'cancelled' && (
             <div className="card mt-16">
               <div className="card-header"><span className="card-title">Trip Controls</span></div>
@@ -171,19 +239,6 @@ export default function ProviderBookings({ navigate }) {
                     if (selected) loadBookings(selected);
                   }}
                 />
-              </div>
-            </div>
-          )}
-          
-          {/* Show cancelled ride info */}
-          {selectedRide && selectedRide.status === 'cancelled' && (
-            <div className="card mt-16" style={{borderColor: '#f4a0a0'}}>
-              <div className="card-header" style={{color: '#f4a0a0'}}>
-                <span className="card-title">❌ Ride Cancelled</span>
-              </div>
-              <div className="card-body">
-                <p className="text-muted">This ride was cancelled on {new Date(selectedRide.cancelledAt).toLocaleString()}</p>
-                {selectedRide.cancelReason && <p>Reason: {selectedRide.cancelReason}</p>}
               </div>
             </div>
           )}
@@ -199,9 +254,7 @@ export default function ProviderBookings({ navigate }) {
             <>
               <div className="pb-section-head mb-16">
                 <h2 className="heading" style={{fontSize:18}}>Pending</h2>
-                {pending.length > 0 && (
-                  <span className="pending-badge">{pending.length}</span>
-                )}
+                {pending.length > 0 && <span className="pending-badge">{pending.length}</span>}
               </div>
 
               {pending.length === 0 ? (
@@ -209,6 +262,11 @@ export default function ProviderBookings({ navigate }) {
                   <div className="empty-icon">📭</div>
                   <div className="empty-title">No pending requests</div>
                   <div className="empty-sub">All caught up!</div>
+                  {!connected && (
+                    <p className="text-muted text-xs mt-8">
+                      (Connect to internet for real-time updates)
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="bk-list mb-32">
@@ -232,11 +290,16 @@ export default function ProviderBookings({ navigate }) {
                           <div className="flex gap-10">
                             <button
                               className={`btn btn-success ${am.loading ? 'btn-loading' : ''}`}
-                              onClick={() => respond(b._id,'accepted')} disabled={am.loading || am.done}>
+                              onClick={() => respond(b._id,'accepted')} 
+                              disabled={am.loading || am.done}
+                            >
                               {!am.loading && '✓ Accept'}
                             </button>
-                            <button className="btn btn-danger"
-                              onClick={() => respond(b._id,'rejected')} disabled={am.loading || am.done}>
+                            <button 
+                              className="btn btn-danger"
+                              onClick={() => respond(b._id,'rejected')} 
+                              disabled={am.loading || am.done}
+                            >
                               ✕ Reject
                             </button>
                           </div>

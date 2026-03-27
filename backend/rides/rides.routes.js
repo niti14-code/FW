@@ -18,6 +18,8 @@ router.get('/recurring/:rideId/instances', controller.getRecurringInstances);
 router.get('/:id', controller.getRide);
 router.put('/:id', controller.updateRide);
 router.delete('/:id', controller.deleteRide);
+// Add this with other routes
+router.get('/nearby-suggestions', controller.findNearbyRides);
 
 // Trip status flow
 router.post('/:rideId/checklist', controller.submitChecklist);

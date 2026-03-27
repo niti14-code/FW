@@ -2,8 +2,11 @@
 //  API SERVICE  —  frontend/src/services/api.js
 // ══════════════════════════════════════════════════════════════════
 
-export const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000/api';
-const BASE = API_BASE;
+// FIXED: Remove /api suffix if present, then add it back for REST calls only
+const rawBase = import.meta.env?.VITE_API_URL || 'http://localhost:5000';
+export const API_BASE = rawBase.replace(/\/api\/?$/, ''); // Remove /api if present
+const BASE = `${API_BASE}/api`; // Add /api for REST calls
+
 // ── Token / User helpers ──────────────────────────────────────────
 export const getToken   = ()  => localStorage.getItem('cr_token') || ''
 export const setToken   = (t) => localStorage.setItem('cr_token', t);
@@ -42,7 +45,7 @@ export const searchLocation = async (query) => {
     // Try backend proxy first (avoids CORS)
     try {
       const response = await fetch(
-        `${API_BASE}/location/search?q=${encodeURIComponent(query)}`,
+        `${API_BASE}/api/location/search?q=${encodeURIComponent(query)}`,
         {
           headers: {
             'Authorization': `Bearer ${getToken()}`,
@@ -75,7 +78,7 @@ export const reverseGeocode = async (lat, lng) => {
   try {
     // Try backend proxy first (avoids CORS)
     const response = await fetch(
-      `${API_BASE}/location/reverse?lat=${lat}&lng=${lng}`,
+      `${API_BASE}/api/location/reverse?lat=${lat}&lng=${lng}`,
       {
         headers: {
           'Authorization': `Bearer ${getToken()}`,
@@ -601,4 +604,17 @@ export const uploadKycFile = async (file) => {
     reader.readAsDataURL(file);
   });
   
+}; 
+
+// Add to api.js
+export const findNearbySuggestions = ({ lat, lng, originalDistance, date, expandDistance, expandDate }) => {
+  const params = new URLSearchParams();
+  params.append('lat', lat);
+  params.append('lng', lng);
+  if (originalDistance) params.append('originalDistance', originalDistance);
+  if (date) params.append('date', date);
+  if (expandDistance) params.append('expandDistance', expandDistance);
+  if (expandDate) params.append('expandDate', expandDate);
+  
+  return request(`/ride/nearby-suggestions?${params.toString()}`);
 };

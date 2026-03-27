@@ -54,6 +54,7 @@ const css = `
   @keyframes ra-fade { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
   .ra-banner-err  { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.25);  color: #fca5a5; }
   .ra-banner-ok   { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2);   color: #86efac; }
+  .ra-banner-urgent { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
 
   /* card */
   .ra-card {
@@ -145,15 +146,37 @@ const css = `
     position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
     background: linear-gradient(180deg, #f59e0b, rgba(245,158,11,0.2));
   }
+  .ra-alert-item.urgent::before {
+    background: linear-gradient(180deg, #ef4444, rgba(239,68,68,0.2));
+  }
   .ra-alert-icon {
     width: 38px; height: 38px; border-radius: 10px;
     background: rgba(245,158,11,0.12);
     display: flex; align-items: center; justify-content: center;
     font-size: 18px; flex-shrink: 0;
   }
+  .ra-alert-icon.urgent {
+    background: rgba(239,68,68,0.15);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
   .ra-alert-body { flex: 1; min-width: 0; }
   .ra-alert-name { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
   .ra-alert-meta { font-size: 11px; color: rgba(255,255,255,0.3); }
+  .ra-alert-urgent-badge {
+    display: inline-block;
+    background: rgba(239,68,68,0.2);
+    color: #fca5a5;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 8px;
+    text-transform: uppercase;
+  }
   .ra-alert-del {
     padding: 6px 14px; border-radius: 8px;
     background: rgba(239,68,68,0.1);
@@ -175,6 +198,21 @@ const css = `
     font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
     text-transform: uppercase; color: rgba(255,255,255,0.25);
     margin: 24px 0 12px;
+  }
+
+  /* notification badge */
+  .ra-notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #ef4444;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
   }
 `;
 
@@ -199,13 +237,16 @@ async function apiFetch(path, opts = {}) {
 }
 
 /* ─── Main Component ─────────────────────────────────────────────── */
-export default function RouteAlerts({ navigate }) {
-  const [tab, setTab]     = useState('alerts');
+export default function RouteAlerts({ navigate, socket }) {
+  const [tab, setTab] = useState('alerts');
   const [alerts, setAlerts] = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError]   = useState('');
+  const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [urgentNotification, setUrgentNotification] = useState(null);
 
   const [form, setForm] = useState({
     name: '', pickup: null, drop: null,
@@ -216,13 +257,78 @@ export default function RouteAlerts({ navigate }) {
     pickup: null, drop: null, date: '', timeStart: '',
   });
 
-  /* fetch alerts */
+  /* fetch alerts and notifications */
   useEffect(() => {
+    fetchAlerts();
+    fetchNotifications();
+    
+    // Socket listeners for real-time notifications
+    if (socket) {
+      socket.on('urgent-availability', handleUrgentAvailability);
+      socket.on('notification', handleNewNotification);
+      socket.on('new-booking', handleProviderBooking);
+      
+      // Authenticate socket
+      const token = getToken();
+      if (token) {
+        socket.emit('authenticate', { 
+          userId: getUserIdFromToken(token),
+          userType: 'seeker'
+        });
+      }
+    }
+    
+    return () => {
+      if (socket) {
+        socket.off('urgent-availability');
+        socket.off('notification');
+        socket.off('new-booking');
+      }
+    };
+  }, [socket]);
+
+  function getUserIdFromToken(token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.userId || payload.id;
+    } catch {
+      return null;
+    }
+  }
+
+  function fetchAlerts() {
     apiFetch('/alerts/my')
       .then(d => setAlerts(Array.isArray(d) ? d : []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }
+
+  function fetchNotifications() {
+    apiFetch('/notifications?limit=10')
+      .then(d => {
+        setNotifications(d.notifications || []);
+        setUnreadCount(d.unreadCount || 0);
+      })
+      .catch(() => {});
+  }
+
+  function handleUrgentAvailability(data) {
+    setUrgentNotification(data);
+    fetchNotifications();
+    // Auto-dismiss after 10 seconds
+    setTimeout(() => setUrgentNotification(null), 10000);
+  }
+
+  function handleNewNotification(data) {
+    fetchNotifications();
+  }
+
+  function handleProviderBooking(data) {
+    // Provider view - show booking notification
+    setSuccess(`🎉 New booking! ${data.booking.seeker.name} booked ${data.booking.seats} seat(s)`);
+    setTimeout(() => setSuccess(''), 5000);
+    fetchNotifications();
+  }
 
   function notify(type, msg) {
     if (type === 'err') setError(msg);
@@ -239,11 +345,11 @@ export default function RouteAlerts({ navigate }) {
       const res = await apiFetch('/alerts', {
         method: 'POST',
         body: JSON.stringify({
-          name:         form.name || 'Route Alert',
-          pickup:       { coordinates: [form.pickup.lng, form.pickup.lat] },
-          drop:         { coordinates: [form.drop.lng,  form.drop.lat]  },
+          name: form.name || 'Route Alert',
+          pickup: { coordinates: [form.pickup.lng, form.pickup.lat] },
+          drop: { coordinates: [form.drop.lng, form.drop.lat] },
           pickupRadius: Number(form.pickupRadius),
-          dropRadius:   Number(form.dropRadius),
+          dropRadius: Number(form.dropRadius),
         }),
       });
       setAlerts(a => [res.alert, ...a]);
@@ -275,10 +381,10 @@ export default function RouteAlerts({ navigate }) {
       await apiFetch('/alerts', {
         method: 'POST',
         body: JSON.stringify({
-          name:   'Ride Request',
+          name: 'Ride Request',
           pickup: { coordinates: [reqForm.pickup.lng, reqForm.pickup.lat] },
-          drop:   { coordinates: [reqForm.drop.lng,  reqForm.drop.lat]  },
-          date:   reqForm.date || undefined,
+          drop: { coordinates: [reqForm.drop.lng, reqForm.drop.lat] },
+          date: reqForm.date || undefined,
           timeRange: reqForm.timeStart ? { start: reqForm.timeStart, end: reqForm.timeStart } : undefined,
         }),
       });
@@ -291,6 +397,16 @@ export default function RouteAlerts({ navigate }) {
     }
   }
 
+  /* mark notification as read */
+  async function markAsRead(id) {
+    try {
+      await apiFetch(`/notifications/${id}/read`, { method: 'PUT' });
+      fetchNotifications();
+    } catch (err) {
+      console.error('Failed to mark as read:', err);
+    }
+  }
+
   return (
     <>
       <style>{css}</style>
@@ -300,12 +416,56 @@ export default function RouteAlerts({ navigate }) {
         <h1 className="ra-title">Route Alerts</h1>
         <p className="ra-sub">Get notified when rides match your route, or post a request for providers to see.</p>
 
-        {error   && <div className="ra-banner ra-banner-err">⚠ {error}</div>}
+        {/* Urgent Notification Banner */}
+        {urgentNotification && (
+          <div className="ra-banner ra-banner-urgent" style={{ position: 'relative' }}>
+            <span style={{ fontSize: 20 }}>🔥</span>
+            <div style={{ flex: 1 }}>
+              <strong>{urgentNotification.notification.title}</strong>
+              <div style={{ marginTop: 4, fontSize: 12 }}>
+                {urgentNotification.notification.body}
+              </div>
+              <button 
+                onClick={() => navigate(`/ride/${urgentNotification.ride._id}`)}
+                style={{
+                  marginTop: 8,
+                  padding: '6px 12px',
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Book Now →
+              </button>
+            </div>
+            <button 
+              onClick={() => setUrgentNotification(null)}
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                background: 'none',
+                border: 'none',
+                color: 'rgba(255,255,255,0.5)',
+                cursor: 'pointer',
+                fontSize: 16
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {error && <div className="ra-banner ra-banner-err">⚠ {error}</div>}
         {success && <div className="ra-banner ra-banner-ok">✓ {success}</div>}
 
         {/* Tabs */}
         <div className="ra-tabs">
-          {[['alerts','🔔 My Alerts'], ['create','＋ New Alert'], ['request','🚗 Post Request']].map(([key, label]) => (
+          {[['alerts',`🔔 My Alerts${unreadCount > 0 ? ` (${unreadCount})` : ''}`], ['create','＋ New Alert'], ['request','🚗 Post Request']].map(([key, label]) => (
             <button key={key} className={`ra-tab${tab === key ? ' active' : ''}`}
               onClick={() => { setTab(key); setError(''); setSuccess(''); }}>
               {label}
@@ -327,10 +487,15 @@ export default function RouteAlerts({ navigate }) {
               <>
                 <div className="ra-section-label">{alerts.length} active alert{alerts.length !== 1 ? 's' : ''}</div>
                 {alerts.map(a => (
-                  <div key={a._id} className="ra-alert-item">
-                    <div className="ra-alert-icon">🔔</div>
+                  <div key={a._id} className={`ra-alert-item${a.hasUrgentMatch ? ' urgent' : ''}`}>
+                    <div className={`ra-alert-icon${a.hasUrgentMatch ? ' urgent' : ''}`}>
+                      {a.hasUrgentMatch ? '🔥' : '🔔'}
+                    </div>
                     <div className="ra-alert-body">
-                      <div className="ra-alert-name">{a.name || 'Route Alert'}</div>
+                      <div className="ra-alert-name">
+                        {a.name || 'Route Alert'}
+                        {a.hasUrgentMatch && <span className="ra-alert-urgent-badge">Only {a.urgentSeats} left!</span>}
+                      </div>
                       <div className="ra-alert-meta">
                         Pickup radius: {(a.pickupRadius / 1000).toFixed(1)} km
                         &nbsp;·&nbsp;
@@ -341,6 +506,51 @@ export default function RouteAlerts({ navigate }) {
                     <button className="ra-alert-del" onClick={() => handleDelete(a._id)}>Delete</button>
                   </div>
                 ))}
+
+                {/* Recent Notifications */}
+                {notifications.length > 0 && (
+                  <>
+                    <div className="ra-section-label" style={{ marginTop: 32 }}>Recent Notifications</div>
+                    {notifications.slice(0, 5).map(n => (
+                      <div 
+                        key={n._id} 
+                        className="ra-alert-item"
+                        style={{ 
+                          opacity: n.readAt ? 0.6 : 1,
+                          cursor: n.data?.rideId ? 'pointer' : 'default'
+                        }}
+                        onClick={() => {
+                          if (!n.readAt) markAsRead(n._id);
+                          if (n.data?.rideId) navigate(`/ride/${n.data.rideId}`);
+                        }}
+                      >
+                        <div className="ra-alert-icon" style={{
+                          background: n.priority === 'critical' ? 'rgba(239,68,68,0.15)' : 
+                                     n.priority === 'high' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)'
+                        }}>
+                          {n.type === 'URGENT_AVAILABILITY' ? '🔥' : 
+                           n.type === 'BOOKING_CONFIRMED' ? '✅' : 
+                           n.type === 'ROUTE_MATCH' ? '🎯' : '🔔'}
+                        </div>
+                        <div className="ra-alert-body">
+                          <div className="ra-alert-name" style={{ fontSize: 13 }}>
+                            {n.title}
+                            {!n.readAt && <span style={{
+                              display: 'inline-block',
+                              width: 6,
+                              height: 6,
+                              background: '#f59e0b',
+                              borderRadius: '50%',
+                              marginLeft: 8,
+                              verticalAlign: 'middle'
+                            }} />}
+                          </div>
+                          <div className="ra-alert-meta">{n.body}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
               </>
             )}
           </div>

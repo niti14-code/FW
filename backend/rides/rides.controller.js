@@ -71,9 +71,9 @@ exports.createRide = async (req, res) => {
 // ================= SEARCH RIDES =================
 exports.searchRides = async (req, res) => {
   try {
-    const { lat, lng, maxDistance = 5000, date } = req.query;
+    const { lat, lng, maxDistance = 5000, date, dropLat, dropLng } = req.query;
     
-    console.log('Search params:', { lat, lng, maxDistance, date });
+    console.log('Search params:', { lat, lng, maxDistance, date, dropLat, dropLng });
 
     // Build base query - only active rides with available seats
     const query = { 
@@ -104,7 +104,7 @@ exports.searchRides = async (req, res) => {
       
       console.log('Geo search:', { latitude, longitude, distanceInMeters });
 
-      // Find rides where pickup is within maxDistance
+      // FIXED: Find rides where pickup is within maxDistance
       rides = await Ride.find({
         ...query,
         pickup: {
@@ -119,6 +119,33 @@ exports.searchRides = async (req, res) => {
       }).populate('providerId', 'name rating');
       
       console.log(`Found ${rides.length} rides within ${distanceInMeters}m`);
+
+      // FIXED: If drop location provided, filter by drop distance too
+      if (dropLat && dropLng && !isNaN(parseFloat(dropLat)) && !isNaN(parseFloat(dropLng))) {
+        const dropLatitude = parseFloat(dropLat);
+        const dropLongitude = parseFloat(dropLng);
+        
+        rides = rides.filter(ride => {
+          if (!ride.drop?.coordinates || ride.drop.coordinates.length !== 2) return false;
+          
+          // Calculate distance using Haversine formula
+          const R = 6371e3; // Earth's radius in meters
+          const φ1 = dropLatitude * Math.PI / 180;
+          const φ2 = ride.drop.coordinates[1] * Math.PI / 180;
+          const Δφ = (ride.drop.coordinates[1] - dropLatitude) * Math.PI / 180;
+          const Δλ = (ride.drop.coordinates[0] - dropLongitude) * Math.PI / 180;
+          
+          const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                    Math.cos(φ1) * Math.cos(φ2) *
+                    Math.sin(Δλ/2) * Math.sin(Δλ/2);
+          const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+          const distance = R * c;
+          
+          return distance <= distanceInMeters;
+        });
+        
+        console.log(`After drop filter: ${rides.length} rides`);
+      }
     } else {
       // No coordinates - return all rides matching date filter (if any)
       rides = await Ride.find(query)
@@ -439,15 +466,50 @@ exports.getRideStatus = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
 // ================= NO MATCH SUGGEST =================
 exports.noMatchSuggest = async (req, res) => {
   try {
-    // basic fallback suggestion (can be improved later)
-    const rides = await Ride.find({ status: 'active' })
-      .limit(5)
-      .populate('providerId', 'name rating');
+    // FIXED: Return properly formatted suggestions with unique rides only
+    const { lat, lng } = req.query;
+    
+    let rides = [];
+    
+    if (lat && lng) {
+      // Find rides near the seeker's location (even if not exact match)
+      rides = await Ride.find({ 
+        status: 'active',
+        seatsAvailable: { $gt: 0 },
+        pickup: {
+          $near: {
+            $geometry: {
+              type: 'Point',
+              coordinates: [parseFloat(lng), parseFloat(lat)]
+            },
+            $maxDistance: 50000 // 50km - wider search for suggestions
+          }
+        }
+      })
+      .populate('providerId', 'name rating')
+      .limit(3);
+    } else {
+      // Fallback: return any active rides
+      rides = await Ride.find({ status: 'active', seatsAvailable: { $gt: 0 } })
+        .populate('providerId', 'name rating')
+        .limit(3)
+        .sort({ createdAt: -1 });
+    }
+    
+    // Remove duplicates by pickup+drop+date combination
+    const uniqueRides = rides.filter((ride, index, self) => 
+      index === self.findIndex(r => 
+        r.pickup?.address === ride.pickup?.address &&
+        r.drop?.address === ride.drop?.address &&
+        r.date?.toISOString() === ride.date?.toISOString()
+      )
+    );
 
-    res.json({ suggestions: rides });
+    res.json(uniqueRides); // Return array directly, not wrapped in object
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -469,4 +531,162 @@ exports.getRecurringInstances = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// ================= FIND NEARBY/RELATED RIDES (for suggestions) =================
+exports.findNearbyRides = async (req, res) => {
+  try {
+    const { 
+      lat, 
+      lng, 
+      originalDistance = 5000, 
+      date,
+      expandDistance = true,
+      expandDate = true 
+    } = req.query;
+
+    if (!lat || !lng) {
+      return res.status(400).json({ message: 'Latitude and longitude required' });
+    }
+
+    const latitude = parseFloat(lat);
+    const longitude = parseFloat(lng);
+    const originalDate = date ? new Date(date) : null;
+
+    const results = {
+      exactMatches: [],
+      expandedDistance: [],
+      expandedDate: [],
+      message: ''
+    };
+
+    // 1. Find exact matches (original criteria)
+    const exactQuery = {
+      status: 'active',
+      seatsAvailable: { $gt: 0 }
+    };
+
+    if (originalDate) {
+      const nextDay = new Date(originalDate);
+      nextDay.setDate(nextDay.getDate() + 1);
+      exactQuery.date = { $gte: originalDate, $lt: nextDay };
+    }
+
+    results.exactMatches = await Ride.find({
+      ...exactQuery,
+      pickup: {
+        $near: {
+          $geometry: { type: 'Point', coordinates: [longitude, latitude] },
+          $maxDistance: parseInt(originalDistance)
+        }
+      }
+    }).populate('providerId', 'name rating');
+
+    // 2. If few/no exact matches, expand distance (up to 25km)
+    if (results.exactMatches.length < 3 && expandDistance === 'true') {
+      const expandedQuery = { ...exactQuery };
+      
+      // Remove date filter if expanding date too
+      if (expandDate !== 'true' && originalDate) {
+        const nextDay = new Date(originalDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        expandedQuery.date = { $gte: originalDate, $lt: nextDay };
+      }
+
+      const expandedRides = await Ride.find({
+        ...expandedQuery,
+        pickup: {
+          $near: {
+            $geometry: { type: 'Point', coordinates: [longitude, latitude] },
+            $maxDistance: 25000 // 25km expanded search
+          }
+        }
+      }).populate('providerId', 'name rating');
+
+      // Filter out exact matches to avoid duplicates
+      const exactIds = results.exactMatches.map(r => r._id.toString());
+      results.expandedDistance = expandedRides.filter(r => 
+        !exactIds.includes(r._id.toString()) &&
+        r.pickup.coordinates // Ensure coordinates exist
+      ).slice(0, 5); // Limit to 5 suggestions
+
+      // Calculate actual distance for each
+      results.expandedDistance = results.expandedDistance.map(ride => {
+        const dist = calculateDistance(
+          latitude, longitude,
+          ride.pickup.coordinates[1], ride.pickup.coordinates[0]
+        );
+        return { ...ride.toObject(), actualDistance: Math.round(dist / 100) / 10 }; // km with 1 decimal
+      });
+    }
+
+    // 3. If still few, expand date range (±2 days)
+    if ((results.exactMatches.length + results.expandedDistance.length) < 3 && expandDate === 'true' && originalDate) {
+      const startDate = new Date(originalDate);
+      startDate.setDate(startDate.getDate() - 2);
+      const endDate = new Date(originalDate);
+      endDate.setDate(endDate.getDate() + 3); // +3 to include day after
+
+      const dateExpandedQuery = {
+        status: 'active',
+        seatsAvailable: { $gt: 0 },
+        date: { $gte: startDate, $lt: endDate }
+      };
+
+      const dateRides = await Ride.find({
+        ...dateExpandedQuery,
+        pickup: {
+          $near: {
+            $geometry: { type: 'Point', coordinates: [longitude, latitude] },
+            $maxDistance: parseInt(originalDistance) // Keep original distance for date expansion
+          }
+        }
+      }).populate('providerId', 'name rating');
+
+      // Filter out duplicates
+      const existingIds = [
+        ...results.exactMatches.map(r => r._id.toString()),
+        ...results.expandedDistance.map(r => r._id.toString())
+      ];
+      
+      results.expandedDate = dateRides.filter(r => 
+        !existingIds.includes(r._id.toString())
+      ).slice(0, 5).map(ride => ({
+        ...ride.toObject(),
+        daysFromTarget: Math.round((new Date(ride.date) - originalDate) / (1000 * 60 * 60 * 24))
+      }));
+    }
+
+    // Generate helpful message
+    const totalFound = results.exactMatches.length + results.expandedDistance.length + results.expandedDate.length;
+    
+    if (totalFound === 0) {
+      results.message = 'No rides found nearby. Try increasing your search radius or selecting a different date.';
+    } else if (results.exactMatches.length > 0) {
+      results.message = `Found ${results.exactMatches.length} exact matches.`;
+    } else if (results.expandedDistance.length > 0 || results.expandedDate.length > 0) {
+      results.message = `No exact matches, but found ${totalFound} nearby options.`;
+    }
+
+    res.json(results);
+  } catch (error) {
+    console.error('Find nearby rides error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Helper: Calculate distance between two points
+const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // Earth's radius in meters
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+            Math.cos(φ1) * Math.cos(φ2) *
+            Math.sin(Δλ/2) * Math.sin(Δλ/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+  return R * c; // Distance in meters
 };
