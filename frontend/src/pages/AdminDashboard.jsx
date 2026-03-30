@@ -479,6 +479,18 @@ function UsersTab({ notify }) {
     } catch(e) { notify(e.message,'err'); }
     finally { setActing(a=>({...a,[id]:false})); }
   }
+  
+  async function deleteUser(id) {
+  if (!confirm('Are you sure you want to delete this user?')) return;
+
+  try {
+    await apiFetch(`/admin/users/${id}`, { method: 'DELETE' });
+    setUsers(prev => prev.filter(u => u._id !== id));
+    notify('User deleted');
+  } catch (e) {
+    notify(e.message, 'err');
+  }
+}
 
   return (
     <div>
@@ -780,6 +792,26 @@ function KYCTab({ notify, onStatRefresh }) {
                           {acting[u._id] === 'approved' ? '…' : '✓ Approve'}
                         </button>
                       )}
+                      <td>
+  <div className="ad-actions">
+    {u.suspended
+      ? <button className="ad-btn-activate" onClick={()=>toggleSuspend(u._id,u.suspended)}>
+          Activate
+        </button>
+      : <button className="ad-btn-suspend" onClick={()=>toggleSuspend(u._id,u.suspended)}>
+          Suspend
+        </button>
+    }
+
+    {/* ✅ NEW DELETE BUTTON */}
+    <button 
+      className="ad-btn-delete"
+      onClick={() => deleteUser(u._id)}
+    >
+      Delete
+    </button>
+  </div>
+</td>
                     </div>
                   </td>
                 </tr>
