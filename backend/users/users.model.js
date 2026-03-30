@@ -14,6 +14,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: function () { return this.role !== 'admin'; }
   },
+  suspended: {
+  type: Boolean,
+  default: false
+  },
 
   // Ratings aggregate (updated by ratings controller)
   rating:        { type: Number, default: 0 },

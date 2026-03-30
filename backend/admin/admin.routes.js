@@ -32,4 +32,6 @@ router.get('/settings', controller.getAllSettings);
 router.post('/settings', controller.setSetting);
 router.get('/settings/:key', controller.getSetting);
 
+router.delete('/users/:id', controller.deleteUser);
+
 module.exports = router;

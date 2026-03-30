@@ -226,3 +226,21 @@ exports.getAllSettings = async (req, res) => {
     res.status(500).json({ message: err.message }); 
   }
 };
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.role === 'admin') {
+      return res.status(400).json({ message: 'Cannot delete admin' });
+    }
+
+    await User.findByIdAndDelete(req.params.id);
+
+    res.json({ message: 'User deleted successfully' });
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
