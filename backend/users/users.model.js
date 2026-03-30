@@ -26,7 +26,7 @@ const userSchema = new mongoose.Schema({
   // KYC fields - updated for new flow
   kycStatus: {
     type: String,
-    enum: ['not_submitted', 'pending', 'approved', 'rejected'],
+    enum: ['pending', 'approved', 'rejected', 'not_submitted', 'not_required'],
     default: 'not_submitted'
   },
   kycDocuments: {
