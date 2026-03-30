@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000';
+const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000'|| window.location.origin;
 
 function getToken() { return localStorage.getItem('cr_token') || ''; }
 
@@ -447,8 +447,7 @@ function OverviewTab({ stats: s, loading, setTab }) {
     </div>
   );
 }
-
-/* ─── Users ──────────────────────────────────────────────────────── */
+//__________________Users Tab________________________________
 function UsersTab({ notify }) {
   const [users,setUsers]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -470,7 +469,7 @@ function UsersTab({ notify }) {
 
   useEffect(()=>{ load(); },[load]);
 
-  async function toggleSuspend(id,isSusp) {
+  async function toggleSuspend(id) {
     setActing(a=>({...a,[id]:true}));
     try {
       const data = await apiFetch(`/admin/users/${id}/suspend`,{method:'PUT'});
@@ -479,52 +478,134 @@ function UsersTab({ notify }) {
     } catch(e) { notify(e.message,'err'); }
     finally { setActing(a=>({...a,[id]:false})); }
   }
-  
-  async function deleteUser(id) {
-  if (!confirm('Are you sure you want to delete this user?')) return;
 
-  try {
-    await apiFetch(`/admin/users/${id}`, { method: 'DELETE' });
-    setUsers(prev => prev.filter(u => u._id !== id));
-    notify('User deleted');
-  } catch (e) {
-    notify(e.message, 'err');
+  async function deleteUser(id) {
+    if (!confirm('Are you sure you want to delete this user?')) return;
+
+    try {
+      await apiFetch(`/admin/users/${id}`, { method: 'DELETE' });
+      setUsers(prev => prev.filter(u => u._id !== id));
+      notify('User deleted');
+    } catch (e) {
+      notify(e.message, 'err');
+    }
   }
-}
 
   return (
     <div>
-      <input className="ad-search" placeholder="🔍  Search by name or email…" value={search} onChange={e=>setSearch(e.target.value)} />
+      <input 
+        className="ad-search" 
+        placeholder="🔍  Search by name or email…" 
+        value={search} 
+        onChange={e=>setSearch(e.target.value)} 
+      />
+
       <div className="ad-filter-row">
         {[['','All'],['provider','Providers'],['seeker','Seekers'],['both','Both']].map(([v,l])=>(
-          <button key={v} className={`ad-filter-btn${roleFilter===v?' active':''}`} onClick={()=>setRoleFilter(v)}>{l}</button>
+          <button 
+            key={v} 
+            className={`ad-filter-btn${roleFilter===v?' active':''}`} 
+            onClick={()=>setRoleFilter(v)}
+          >
+            {l}
+          </button>
         ))}
       </div>
+
       {loading ? <div className="ad-loading">Loading users…</div> : (
         <div className="ad-table-wrap">
           <table className="ad-table">
-            <thead><tr><th>User</th><th>Role</th><th>College</th><th>KYC</th><th>Rides</th><th>Joined</th><th>Status</th><th>Action</th></tr></thead>
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>College</th>
+                <th>KYC</th>
+                <th>Rides</th>
+                <th>Joined</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+
             <tbody>
               {users.length===0 ? (
-                <tr><td colSpan={8} style={{textAlign:'center',padding:40,color:'rgba(255,255,255,0.25)'}}>No users found</td></tr>
+                <tr>
+                  <td colSpan={8} style={{textAlign:'center',padding:40,color:'rgba(255,255,255,0.25)'}}>
+                    No users found
+                  </td>
+                </tr>
               ) : users.map(u=>(
                 <tr key={u._id}>
                   <td>
                     <div className="ad-user-cell">
-                      <div className={`ad-avatar${u.suspended?' suspended':''}`}>{u.name?.charAt(0)?.toUpperCase()||'?'}</div>
-                      <div><div className="ad-user-name">{u.name}</div><div className="ad-user-email">{u.email}</div></div>
+                      <div className={`ad-avatar${u.suspended?' suspended':''}`}>
+                        {u.name?.charAt(0)?.toUpperCase()||'?'}
+                      </div>
+                      <div>
+                        <div className="ad-user-name">{u.name}</div>
+                        <div className="ad-user-email">{u.email}</div>
+                      </div>
                     </div>
                   </td>
-                  <td><span className={`ad-badge ad-badge-${u.role}`}>{u.role}</span></td>
-                  <td style={{fontSize:12,color:'rgba(255,255,255,0.42)',maxWidth:140}}>{u.college||'—'}</td>
-                  <td><span className={`ad-badge ad-badge-${u.kycStatus==='not_required'?'suspended':u.kycStatus}`}>{u.kycStatus==='not_required'?'N/A':u.kycStatus}</span></td>
-                  <td style={{fontWeight:600}}>{u.totalRides||0}</td>
-                  <td style={{fontSize:12,color:'rgba(255,255,255,0.32)'}}>{new Date(u.createdAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</td>
-                  <td><span className={`ad-badge ${u.suspended?'ad-badge-suspended':'ad-badge-active'}`}>{u.suspended?'Suspended':'Active'}</span></td>
+
                   <td>
-                    {u.suspended
-                      ? <button className="ad-btn-activate" disabled={acting[u._id]} onClick={()=>toggleSuspend(u._id,u.suspended)}>{acting[u._id]?'…':'Activate'}</button>
-                      : <button className="ad-btn-suspend"  disabled={acting[u._id]} onClick={()=>toggleSuspend(u._id,u.suspended)}>{acting[u._id]?'…':'Suspend'}</button>}
+                    <span className={`ad-badge ad-badge-${u.role}`}>
+                      {u.role}
+                    </span>
+                  </td>
+
+                  <td style={{fontSize:12,color:'rgba(255,255,255,0.42)',maxWidth:140}}>
+                    {u.college||'—'}
+                  </td>
+
+                  <td>
+                    <span className={`ad-badge ad-badge-${u.kycStatus==='not_required'?'suspended':u.kycStatus}`}>
+                      {u.kycStatus==='not_required'?'N/A':u.kycStatus}
+                    </span>
+                  </td>
+
+                  <td style={{fontWeight:600}}>
+                    {u.totalRides||0}
+                  </td>
+
+                  <td style={{fontSize:12,color:'rgba(255,255,255,0.32)'}}>
+                    {new Date(u.createdAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}
+                  </td>
+
+                  <td>
+                    <span className={`ad-badge ${u.suspended?'ad-badge-suspended':'ad-badge-active'}`}>
+                      {u.suspended?'Suspended':'Active'}
+                    </span>
+                  </td>
+
+                  <td>
+                    <div className="ad-actions">
+                      {u.suspended
+                        ? <button 
+                            className="ad-btn-activate" 
+                            disabled={acting[u._id]} 
+                            onClick={()=>toggleSuspend(u._id)}
+                          >
+                            {acting[u._id]?'…':'Activate'}
+                          </button>
+                        : <button 
+                            className="ad-btn-suspend"  
+                            disabled={acting[u._id]} 
+                            onClick={()=>toggleSuspend(u._id)}
+                          >
+                            {acting[u._id]?'…':'Suspend'}
+                          </button>
+                      }
+
+                      {/* ✅ DELETE BUTTON */}
+                      <button 
+                        className="ad-btn-delete"
+                        onClick={() => deleteUser(u._id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -792,26 +873,6 @@ function KYCTab({ notify, onStatRefresh }) {
                           {acting[u._id] === 'approved' ? '…' : '✓ Approve'}
                         </button>
                       )}
-                      <td>
-  <div className="ad-actions">
-    {u.suspended
-      ? <button className="ad-btn-activate" onClick={()=>toggleSuspend(u._id,u.suspended)}>
-          Activate
-        </button>
-      : <button className="ad-btn-suspend" onClick={()=>toggleSuspend(u._id,u.suspended)}>
-          Suspend
-        </button>
-    }
-
-    {/* ✅ NEW DELETE BUTTON */}
-    <button 
-      className="ad-btn-delete"
-      onClick={() => deleteUser(u._id)}
-    >
-      Delete
-    </button>
-  </div>
-</td>
                     </div>
                   </td>
                 </tr>
