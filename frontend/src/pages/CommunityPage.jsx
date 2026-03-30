@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext.jsx';
 import './CommunityPage.css';
 
 const MOCK_POSTS = [
@@ -13,7 +14,15 @@ const TYPE_COLOR = { tip:'var(--accent)', landmark:'var(--green)', alert:'var(--
 const TYPE_LABEL = { tip:'Tip', landmark:'Pin', alert:'Alert' };
 
 export default function CommunityPage({ navigate }) {
-  const [posts,    setPosts]    = useState(MOCK_POSTS);
+  const { user } = useAuth();
+  const userCollege = user?.college || '';
+
+  // Only show posts from the same college as the logged-in user
+  const collegePosts = MOCK_POSTS.filter(
+    p => p.college.trim().toLowerCase() === userCollege.trim().toLowerCase()
+  );
+
+  const [posts,    setPosts]    = useState(collegePosts);
   const [showForm, setShowForm] = useState(false);
   const [filter,   setFilter]   = useState('all');
   const [form,     setForm]     = useState({ content:'', type:'tip' });
@@ -28,8 +37,8 @@ export default function CommunityPage({ navigate }) {
   const handlePost = () => {
     if (!form.content.trim()) return;
     setPosts(p => [{
-      id: String(Date.now()), author:'You', college:'Your College',
-      time:'Just now', type:form.type, content:form.content, likes:0, avatar:'Y'
+      id: String(Date.now()), author: user?.name || 'You', college: userCollege,
+      time:'Just now', type:form.type, content:form.content, likes:0, avatar:(user?.name?.[0] || 'Y').toUpperCase()
     }, ...p]);
     setForm({content:'', type:'tip'});
     setShowForm(false);
@@ -41,7 +50,11 @@ export default function CommunityPage({ navigate }) {
     <div className="community-wrap fade-up">
       <p className="eyebrow mb-8">Community</p>
       <h1 className="heading mb-4" style={{fontSize:28}}>Community Hub</h1>
-      <p className="text-muted mb-32 text-sm">Share tips, landmarks, and alerts with fellow campus commuters</p>
+      <p className="text-muted mb-32 text-sm">
+        {userCollege
+          ? <>Showing posts from <strong>{userCollege}</strong> only</>
+          : 'Share tips, landmarks, and alerts with fellow campus commuters'}
+      </p>
 
       <div className="comm-top mb-24">
         <div className="comm-filters">

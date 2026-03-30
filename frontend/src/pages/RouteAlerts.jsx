@@ -295,6 +295,14 @@ export default function RouteAlerts({ navigate, socket }) {
       return null;
     }
   }
+  function getUserTypeFromToken(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.role || payload.userType;
+  } catch {
+    return null;
+  }
+}
 
   function fetchAlerts() {
     apiFetch('/alerts/my')

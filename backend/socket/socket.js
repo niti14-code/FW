@@ -36,3 +36,7 @@ module.exports = {
     return io;
   }
 };
+socket.on("authenticate", ({ userId, userType }) => {
+  socket.join(`user-${userId}`);
+  console.log(`User ${userId} (${userType}) authenticated`);
+});

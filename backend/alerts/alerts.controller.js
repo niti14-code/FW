@@ -13,7 +13,7 @@ exports.createAlert = async (req, res) => {
     } = req.body;
     
     const alert = new Alert({
-      userId: req.user.userId,
+      userId: req.user.userId|| req.user.id,
       pickup: { type: 'Point', coordinates: pickup.coordinates },
       drop: { type: 'Point', coordinates: drop.coordinates },
       pickupRadius: pickupRadius || 5000,
@@ -44,7 +44,7 @@ exports.createAlert = async (req, res) => {
 // Get user's alerts
 exports.getMyAlerts = async (req, res) => {
   try {
-    const alerts = await Alert.find({ userId: req.user.userId })
+    const alerts = await Alert.find({ userId: req.user.userId|| req.user.id })
       .sort({ createdAt: -1 });
     res.json(alerts);
   } catch (error) {
@@ -56,7 +56,7 @@ exports.getMyAlerts = async (req, res) => {
 exports.updateAlert = async (req, res) => {
   try {
     const alert = await Alert.findOneAndUpdate(
-      { _id: req.params.id, userId: req.user.userId },
+      { _id: req.params.id, userId: req.user.userId|| req.user.id },
       req.body,
       { new: true }
     );
@@ -73,7 +73,7 @@ exports.deleteAlert = async (req, res) => {
   try {
     const alert = await Alert.findOneAndDelete({ 
       _id: req.params.id, 
-      userId: req.user.userId 
+      userId: req.user.userId|| req.user.id 
     });
     
     if (!alert) return res.status(404).json({ message: 'Alert not found' });
@@ -166,7 +166,7 @@ exports.checkAlertMatches = async (req, res) => {
   try {
     const alert = await Alert.findOne({ 
       _id: req.params.id, 
-      userId: req.user.userId 
+      userId: req.user.userId|| req.user.id 
     });
     
     if (!alert) return res.status(404).json({ message: 'Alert not found' });
@@ -259,7 +259,7 @@ exports.checkLowAvailabilityAndNotify = async (ride, remainingSeats) => {
     for (const alert of alertsToNotify) {
       const notification = new Notification({
         userId: alert.userId._id,
-        userType: 'seeker',
+        userType: alert.userId.role === 'provider' ? 'provider' : 'seeker',
         type: 'URGENT_AVAILABILITY',
         title: `Only ${remainingSeats} seat${remainingSeats > 1 ? 's' : ''} left! 🔥`,
         body: `Hurry! Ride from ${ride.pickup.name || 'pickup'} to ${ride.drop.name || 'drop'} has only ${remainingSeats} seat${remainingSeats > 1 ? 's' : ''} remaining. Book now!`,

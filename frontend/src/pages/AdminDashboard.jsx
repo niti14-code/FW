@@ -799,9 +799,19 @@ function IncidentsTab({ notify }) {
   const [sf,setSf]=useState('');
   const [acting,setActing]=useState({});
 
-  useEffect(()=>{
-    apiFetch('/admin/incidents').then(d=>setIncidents(Array.isArray(d)?d:[])).catch(e=>notify(e.message,'err')).finally(()=>setLoading(false));
-  },[]);
+ useEffect(() => {
+  setLoading(true);
+
+  apiFetch('/admin/kyc') 
+    .then(data => {
+      setUsers(Array.isArray(data) ? data : []); 
+    })
+    .catch(e => {
+      console.error('Failed to fetch KYC:', e);
+      notify(e.message, 'err');
+    })
+    .finally(() => setLoading(false));
+}, []);
 
   async function upd(id,status) {
     setActing(a=>({...a,[id]:true}));

@@ -131,7 +131,10 @@ export default function RegisterPage({ navigate }) {
               {ROLES.map(r => (
                 <button key={r.value} type="button"
                   className={`role-card ${form.role === r.value ? 'selected' : ''}`}
-                  onClick={() => setForm(f => ({ ...f, role: r.value }))}>
+                  onClick={() => {
+                    setForm(f => ({ ...f, role: r.value }));
+                    if (r.value === 'admin') setKycDocs({ aadhar: null, license: null, collegeId: null });
+                  }}>
                   <span className="rc-r-icon">{r.icon}</span>
                   <span className="rc-r-title">{r.title}</span>
                   <span className="rc-r-desc">{r.desc}</span>
@@ -184,36 +187,38 @@ export default function RegisterPage({ navigate }) {
             )}
           </div>
 
-          {/* KYC Documents */}
-          <div className="kyc-docs-section">
-            <div className="kyc-docs-header">
-              <span className="kyc-docs-icon">📋</span>
-              <div>
-                <div className="kyc-docs-title">KYC Documents Required</div>
-                <div className="kyc-docs-sub">Upload for identity verification — reviewed within 24 hrs</div>
-              </div>
-              <span className="badge badge-pending" style={{marginLeft:'auto',fontSize:11}}>Pending</span>
-            </div>
-            <div className="kyc-docs-grid">
-              {[
-                { key:'aadhar',    label:'Aadhar Card *',    icon:'🪪' },
-                { key:'license',   label:'Driving License *', icon:'🚗' },
-                { key:'collegeId', label:'College ID Card *', icon:'🎓' },
-              ].map(d => (
-                <div key={d.key} className="field">
-                  <label>{d.icon} {d.label}</label>
-                  <input type="file" className="input kyc-file-input" accept="image/*,.pdf"
-                    onChange={e => setKycDocs(prev => ({ ...prev, [d.key]: e.target.files[0] }))} />
-                  {kycDocs[d.key] && (
-                    <p className="field-success-msg">✓ {kycDocs[d.key].name}</p>
-                  )}
+          {/* KYC Documents — hidden for admin role */}
+          {form.role !== 'admin' && (
+            <div className="kyc-docs-section">
+              <div className="kyc-docs-header">
+                <span className="kyc-docs-icon">📋</span>
+                <div>
+                  <div className="kyc-docs-title">KYC Documents Required</div>
+                  <div className="kyc-docs-sub">Upload for identity verification — reviewed within 24 hrs</div>
                 </div>
-              ))}
+                <span className="badge badge-pending" style={{marginLeft:'auto',fontSize:11}}>Pending</span>
+              </div>
+              <div className="kyc-docs-grid">
+                {[
+                  { key:'aadhar',    label:'Aadhar Card *',    icon:'🪪' },
+                  { key:'license',   label:'Driving License *', icon:'🚗' },
+                  { key:'collegeId', label:'College ID Card *', icon:'🎓' },
+                ].map(d => (
+                  <div key={d.key} className="field">
+                    <label>{d.icon} {d.label}</label>
+                    <input type="file" className="input kyc-file-input" accept="image/*,.pdf"
+                      onChange={e => setKycDocs(prev => ({ ...prev, [d.key]: e.target.files[0] }))} />
+                    {kycDocs[d.key] && (
+                      <p className="field-success-msg">✓ {kycDocs[d.key].name}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="kyc-docs-note">
+                Your account will be activated once admin approves your documents.
+              </p>
             </div>
-            <p className="kyc-docs-note">
-              Your account will be activated once admin approves your documents.
-            </p>
-          </div>
+          )}
 
           <button type="submit"
             className={`btn btn-primary btn-lg btn-full mt-8 ${loading ? 'btn-loading' : ''}`}
