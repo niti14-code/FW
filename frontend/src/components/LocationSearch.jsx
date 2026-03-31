@@ -7,7 +7,8 @@ export default function LocationSearch({
   onChange, 
   placeholder = 'Search for a location...',
   onLocationSelect,
-  className = ''
+  className = '',
+  excludeColleges = false
 }) {
   const [query, setQuery] = useState(value || '');
   const [suggestions, setSuggestions] = useState([]);
@@ -31,7 +32,45 @@ export default function LocationSearch({
     try {
       const results = await api.searchLocation(searchQuery);
       console.log('Search results:', results);
-      setSuggestions(results);
+      
+      // Filter out colleges if excludeColleges is true
+      const filteredResults = excludeColleges 
+        ? results.filter(location => {
+            const isCollege = location.display_name && (
+              location.display_name.toLowerCase().includes('college') ||
+              location.display_name.toLowerCase().includes('university') ||
+              location.display_name.toLowerCase().includes('institute') ||
+              location.display_name.toLowerCase().includes('medical') ||
+              location.display_name.toLowerCase().includes('engineering') ||
+              location.display_name.toLowerCase().includes('dental') ||
+              location.display_name.toLowerCase().includes('pharmacy') ||
+              location.display_name.toLowerCase().includes('law') ||
+              location.display_name.toLowerCase().includes('architecture') ||
+              location.display_name.toLowerCase().includes('nursing') ||
+              location.display_name.toLowerCase().includes('management') ||
+              location.display_name.toLowerCase().includes('arts') ||
+              location.display_name.toLowerCase().includes('science') ||
+              location.display_name.toLowerCase().includes('commerce') ||
+              location.label.toLowerCase().includes('college') ||
+              location.label.toLowerCase().includes('university') ||
+              location.label.toLowerCase().includes('institute') ||
+              location.label.toLowerCase().includes('medical') ||
+              location.label.toLowerCase().includes('engineering') ||
+              location.label.toLowerCase().includes('dental') ||
+              location.label.toLowerCase().includes('pharmacy') ||
+              location.label.toLowerCase().includes('law') ||
+              location.label.toLowerCase().includes('architecture') ||
+              location.label.toLowerCase().includes('nursing') ||
+              location.label.toLowerCase().includes('management') ||
+              location.label.toLowerCase().includes('arts') ||
+              location.label.toLowerCase().includes('science') ||
+              location.label.toLowerCase().includes('commerce')
+            );
+            return !isCollege;
+          })
+        : results;
+      
+      setSuggestions(filteredResults);
       setShowSuggestions(true);
     } catch (error) {
       console.error('Search failed:', error);
@@ -39,7 +78,7 @@ export default function LocationSearch({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [excludeColleges]);
 
   // Handle search with debouncing
   const handleSearch = (searchQuery) => {

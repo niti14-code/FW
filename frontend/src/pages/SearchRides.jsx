@@ -1,12 +1,54 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import LocationSearch from '../components/LocationSearch.jsx';
+import CollegeLocationSearch from '../components/CollegeLocationSearch.jsx';
 import * as api from '../services/api.js';
 import RideCard from '../components/RideCard.jsx';
 import './SearchRides.css';
 
 export default function SearchRides({ navigate }) {
   const { user } = useAuth();
+
+  // Time-based location configuration
+  const getTimeBasedLocationConfig = () => {
+    const currentHour = new Date().getHours();
+    
+    // Morning to Noon (12 AM - 12 PM): Drop should be colleges, pickup should be general (no colleges)
+    if (currentHour >= 0 && currentHour < 12) {
+      return {
+        pickupIsCollege: false,
+        dropIsCollege: true,
+        message: "Drop locations has access only for colleges"
+      };
+    }
+    
+    // Afternoon to Midnight (12 PM - 12 AM): Pickup should be colleges
+    if (currentHour >= 12 && currentHour < 24) {
+      return {
+        pickupIsCollege: true,
+        dropIsCollege: false,
+        message: "Pickup locations has access only for colleges"
+      };
+    }
+    
+    // This should never be reached, but keeping for safety
+    return {
+      pickupIsCollege: true,
+      dropIsCollege: false,
+      message: ""
+    };
+  };
+
+  const [locationConfig, setLocationConfig] = useState(getTimeBasedLocationConfig());
+
+  // Update location config every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLocationConfig(getTimeBasedLocationConfig());
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   const isSeeker = user?.role === 'seeker' || user?.role === 'both';
   if (!isSeeker) {
@@ -173,6 +215,12 @@ export default function SearchRides({ navigate }) {
           <span className="card-title">Search Filters</span>
         </div>
         <div className="card-body">
+          {locationConfig.message && (
+            <div className="alert alert-info mb-16" style={{background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#22c55e'}}>
+              <span style={{marginRight: 8}}>🎓</span>
+              {locationConfig.message}
+            </div>
+          )}
           {error && <div className="alert alert-error mb-16">{error}</div>}
           
           <div className="search-grid" style={{ display: 'grid', gap: '16px', gridTemplateColumns: '1fr 1fr' }}>
@@ -180,21 +228,39 @@ export default function SearchRides({ navigate }) {
             {/* Pickup Location */}
             <div className="field" style={{marginBottom:0, gridColumn: '1 / -1'}}>
               <label>Pickup Location *</label>
-              <LocationSearch
-                value={filters.lat && filters.lng ? `${filters.lat}, ${filters.lng}` : ''}
-                onChange={(label, lat, lng) => setFilters(f => ({ ...f, lat: lat.toString(), lng: lng.toString() }))}
-                placeholder="Search for your pickup location..."
-              />
+              {locationConfig.pickupIsCollege ? (
+                <CollegeLocationSearch
+                  value={filters.lat && filters.lng ? `${filters.lat}, ${filters.lng}` : ''}
+                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, lat: lat.toString(), lng: lng.toString() }))}
+                  placeholder="Search for college pickup location..."
+                />
+              ) : (
+                <LocationSearch
+                  value={filters.lat && filters.lng ? `${filters.lat}, ${filters.lng}` : ''}
+                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, lat: lat.toString(), lng: lng.toString() }))}
+                  placeholder="Search for your pickup location..."
+                  excludeColleges={true}
+                />
+              )}
             </div>
             
             {/* Drop Location */}
             <div className="field" style={{marginBottom:0, gridColumn: '1 / -1'}}>
               <label>Drop Location <span style={{color: 'rgba(255,255,255,0.4)', fontWeight: 400}}>(optional)</span></label>
-              <LocationSearch
-                value={filters.dropLat && filters.dropLng ? `${filters.dropLat}, ${filters.dropLng}` : ''}
-                onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLat: lat.toString(), dropLng: lng.toString() }))}
-                placeholder="Search for your destination (optional)..."
-              />
+              {locationConfig.dropIsCollege ? (
+                <CollegeLocationSearch
+                  value={filters.dropLat && filters.dropLng ? `${filters.dropLat}, ${filters.dropLng}` : ''}
+                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLat: lat.toString(), dropLng: lng.toString() }))}
+                  placeholder="Search for college destination..."
+                />
+              ) : (
+                <LocationSearch
+                  value={filters.dropLat && filters.dropLng ? `${filters.dropLat}, ${filters.dropLng}` : ''}
+                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLat: lat.toString(), dropLng: lng.toString() }))}
+                  placeholder="Search for your destination (optional)..."
+                  excludeColleges={true}
+                />
+              )}
               <span style={{fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4, display: 'block'}}>
                 Adding a destination helps find rides going your way
               </span>

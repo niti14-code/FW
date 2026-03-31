@@ -1,0 +1,34 @@
+const mongoose = require('mongoose');
+
+const communityPostSchema = new mongoose.Schema({
+  author: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  college: {
+    type: String,
+    required: true,
+    index: true          // fast filtering by college
+  },
+  type: {
+    type: String,
+    enum: ['tip', 'landmark', 'alert'],
+    default: 'tip'
+  },
+  content: {
+    type: String,
+    required: true,
+    maxlength: 500
+  },
+  likes: {
+    type: Number,
+    default: 0
+  },
+  likedBy: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
+}, { timestamps: true });
+
+module.exports = mongoose.model('CommunityPost', communityPostSchema);

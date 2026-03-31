@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import LocationSearch from '../components/LocationSearch.jsx';
 import CollegeLocationSearch from '../components/CollegeLocationSearch.jsx';
@@ -28,12 +28,59 @@ const CITY_PRESETS = [
 
 const EMPTY = { pickupLabel:'', pickupLat:'', pickupLng:'', dropLabel:'', dropLat:'', dropLng:'', date:'', time:'', seatsAvailable:2, costPerSeat:'' };
 
+// Time-based location switching logic
+const getTimeBasedLocationConfig = () => {
+  const currentHour = new Date().getHours();
+  
+  // Morning to Noon (12 AM - 12 PM): Drop should be colleges, pickup should be general (no colleges)
+  if (currentHour >= 0 && currentHour < 12) {
+    return {
+      pickupIsCollege: false,
+      dropIsCollege: true,
+      dropExcludeColleges: false,
+      message: "Morning hours: Drop locations has access only for colleges"
+    };
+  }
+  
+  // Afternoon to Midnight (12 PM - 12 AM): Pickup should be colleges, drop should be general (exclude colleges)
+  if (currentHour >= 12 && currentHour < 24) {
+    return {
+      pickupIsCollege: true,
+      dropIsCollege: false,
+      dropExcludeColleges: true,
+      message: "Afternoon/Evening hours: Pickup locations has access only for colleges"
+    };
+  }
+  
+  // This should never be reached, but keeping for safety
+  return {
+    pickupIsCollege: true,
+    dropIsCollege: false,
+    dropExcludeColleges: true,
+    message: ""
+  };
+};
+
 export default function CreateRide({ navigate }) {
   const { user } = useAuth();
   const [form,    setForm]    = useState(EMPTY);
   const [error,   setError]   = useState('');
   const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [locationConfig, setLocationConfig] = useState(getTimeBasedLocationConfig());
+
+  // Update location config every minute to reflect time changes
+  useEffect(() => {
+    const updateConfig = () => {
+      setLocationConfig(getTimeBasedLocationConfig());
+    };
+    
+    // Update immediately and then every minute
+    updateConfig();
+    const interval = setInterval(updateConfig, 60000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   const isProvider = user?.role === 'provider' || user?.role === 'both';
   if (!isProvider) {
@@ -85,8 +132,6 @@ export default function CreateRide({ navigate }) {
     if (!form.costPerSeat || Number(form.costPerSeat) <= 0) return 'Enter a valid cost per seat';
     if (new Date(`${form.date}T${form.time}`) < new Date()) return 'Date/time must be in the future';
     return null;
-    // College validation removed — partial string matching was rejecting valid locations
-    // typed in slightly different ways. Location is already constrained by LocationSearch.
   };
 
   const submit = async e => {
@@ -97,8 +142,6 @@ export default function CreateRide({ navigate }) {
     setLoading(true);
     try {
       const ride = await api.createRide({
-        // CHANGE: send address string so location names are saved in the DB
-        // and shown in ride cards & details instead of raw coordinates.
         pickup: {
           coordinates: [parseFloat(form.pickupLng), parseFloat(form.pickupLat)],
           address:     form.pickupLabel,
@@ -146,6 +189,11 @@ export default function CreateRide({ navigate }) {
 
       <form onSubmit={submit}>
         {error && <div className="alert alert-error mb-20">{error}</div>}
+        {locationConfig.message && (
+          <div className="alert alert-info mb-20" style={{backgroundColor: '#e3f2fd', color: '#1976d2', border: '1px solid #90caf9'}}>
+            🕐 {locationConfig.message}
+          </div>
+        )}
 
         {/* ── Pickup ── */}
         <div className="loc-section">
@@ -154,17 +202,22 @@ export default function CreateRide({ navigate }) {
           </div>
           <div className="field">
             <label>Pickup Location ✶</label>
-            <LocationSearch
-              value={form.pickupLabel}
-              onChange={(label, lat, lng) => setForm(f => ({ ...f, pickupLabel: label, pickupLat: lat.toString(), pickupLng: lng.toString() }))}
-              placeholder="Search for pickup location..."
-              className="mb-12"
-            />
-          </div>
-          <div className="preset-row">
-            {COLLEGE_PRESETS.slice(0,5).map(p => (
-              <button key={p.label} type="button" className="preset-chip" onClick={() => applyPreset('pickup', p)}>{p.label}</button>
-            ))}
+            {locationConfig.pickupIsCollege ? (
+              <CollegeLocationSearch
+                value={form.pickupLabel}
+                onChange={(label, lat, lng) => setForm(f => ({ ...f, pickupLabel: label, pickupLat: lat.toString(), pickupLng: lng.toString() }))}
+                placeholder="Search for college pickup..."
+                className="mb-12"
+              />
+            ) : (
+              <LocationSearch
+                value={form.pickupLabel}
+                onChange={(label, lat, lng) => setForm(f => ({ ...f, pickupLabel: label, pickupLat: lat.toString(), pickupLng: lng.toString() }))}
+                placeholder="Search for pickup location..."
+                className="mb-12"
+                excludeColleges={true}
+              />
+            )}
           </div>
         </div>
 
@@ -175,17 +228,22 @@ export default function CreateRide({ navigate }) {
           </div>
           <div className="field">
             <label>Drop Location ✶</label>
-            <LocationSearch
-              value={form.dropLabel}
-              onChange={(label, lat, lng) => setForm(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
-              placeholder="Search for drop location..."
-              className="mb-12"
-            />
-          </div>
-          <div className="preset-row">
-            {CITY_PRESETS.slice(0,5).map(p => (
-              <button key={p.label} type="button" className="preset-chip" onClick={() => applyPreset('drop', p)}>{p.label}</button>
-            ))}
+            {locationConfig.dropIsCollege ? (
+              <CollegeLocationSearch
+                value={form.dropLabel}
+                onChange={(label, lat, lng) => setForm(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
+                placeholder="Search for college drop..."
+                className="mb-12"
+              />
+            ) : (
+              <LocationSearch
+                value={form.dropLabel}
+                onChange={(label, lat, lng) => setForm(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
+                placeholder="Search for drop location..."
+                className="mb-12"
+                excludeColleges={locationConfig.dropExcludeColleges}
+              />
+            )}
           </div>
         </div>
 
@@ -200,23 +258,14 @@ export default function CreateRide({ navigate }) {
             <input className="input" type="time" value={form.time} onChange={set('time')} required />
           </div>
           <div className="field" style={{marginBottom:0}}>
-            <label>Cost/Seat ₹ ✶</label>
-            <input className="input" type="number" min="1" placeholder="350" value={form.costPerSeat} onChange={set('costPerSeat')} required />
+            <label>Seats Available ✶</label>
+            <input className="input" type="number" min="1" max="6" value={form.seatsAvailable} onChange={set('seatsAvailable')} required />
           </div>
         </div>
 
-        {/* ── Seats ── */}
         <div className="field mb-20">
-          <label>Available Seats ✶</label>
-          <div className="seat-grid">
-            {[1,2,3,4].map(n => (
-              <button key={n} type="button"
-                className={`seat-btn ${form.seatsAvailable === n ? 'sel' : ''}`}
-                onClick={() => setForm(f => ({...f, seatsAvailable: n}))}>
-                {n} {n===1?'seat':'seats'}
-              </button>
-            ))}
-          </div>
+          <label>Cost per Seat (₹) ✶</label>
+          <input className="input" type="number" min="0" step="10" value={form.costPerSeat} onChange={set('costPerSeat')} placeholder="e.g. 50" required />
         </div>
 
         {/* ── Earnings preview ── */}

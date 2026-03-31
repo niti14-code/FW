@@ -139,33 +139,6 @@ export default function ProviderBookings({ navigate }) {
     <div className="page-wrap fade-up">
       <p className="eyebrow mb-16">Provider</p>
       <h1 className="heading mb-8" style={{fontSize:30}}>Manage Booking Requests</h1>
-      
-      {/* FIXED: Connection status with manual refresh */}
-      <div style={{ 
-        padding: '8px 16px', 
-        borderRadius: 8, 
-        marginBottom: 16,
-        background: connected ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-        color: connected ? '#86efac' : '#fca5a5',
-        fontSize: 12,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between'
-      }}>
-        <span style={{display: 'flex', alignItems: 'center', gap: 8}}>
-          <span style={{fontSize: 16}}>{connected ? '🟢' : '🔴'}</span>
-          {connected ? 'Real-time updates active' : 'Offline mode - click refresh to update'}
-        </span>
-        {!connected && (
-          <button 
-            onClick={manualRefresh}
-            className="btn btn-ghost btn-sm"
-            style={{padding: '4px 12px', fontSize: 11}}
-          >
-            🔄 Refresh
-          </button>
-        )}
-      </div>
 
       {error && <div className="alert alert-error mb-16">{error}</div>}
 
@@ -188,9 +161,6 @@ export default function ProviderBookings({ navigate }) {
           <div className="card">
             <div className="card-header">
               <span className="card-title">Your Rides</span>
-              {!connected && (
-                <span style={{fontSize: 10, color: '#fca5a5'}}> (offline)</span>
-              )}
             </div>
             {ridesLoading ? (
               <div className="card-body sk-list">

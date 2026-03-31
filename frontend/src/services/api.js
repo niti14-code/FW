@@ -618,3 +618,12 @@ export const findNearbySuggestions = ({ lat, lng, originalDistance, date, expand
   
   return request(`/ride/nearby-suggestions?${params.toString()}`);
 };
+
+// ── Community Posts ───────────────────────────────────────────────
+export const getCommunityPosts = () => request('/community');
+
+export const createCommunityPost = (data) =>
+  request('/community', { method: 'POST', body: JSON.stringify(data) });
+
+export const toggleCommunityLike = (postId) =>
+  request(`/community/${postId}/like`, { method: 'PATCH' });
