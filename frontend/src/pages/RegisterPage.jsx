@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
+import { validateCollegeEmail, getDomainsForCollege } from '../data/collegeDomains.js';
 import './AuthPages.css';
 
 const ROLES = [
@@ -22,14 +23,32 @@ export default function RegisterPage({ navigate }) {
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
+  // Live email-domain validation (only for non-admin roles)
+  const emailValidation = useMemo(() => {
+    if (form.role === 'admin') return { valid: true, message: '' };
+    if (!form.email || !form.college) return { valid: true, message: '' };
+    return validateCollegeEmail(form.email, form.college);
+  }, [form.email, form.college, form.role]);
+
+  // Hint text: show expected domain when college is filled
+  const domainHint = useMemo(() => {
+    if (form.role === 'admin' || !form.college) return null;
+    const domains = getDomainsForCollege(form.college);
+    return domains.length > 0 ? `Use your @${domains[0]} college email` : 'Use your official college email (not Gmail/Yahoo)';
+  }, [form.college, form.role]);
+
   const validate = () => {
     if (!form.name.trim())    return 'Name is required';
     if (!form.email.trim())   return 'Email is required';
     if (!/\S+@\S+\.\S+/.test(form.email)) return 'Enter a valid email';
+    if (form.role !== 'admin') {
+      if (!form.college.trim()) return 'College name is required';
+      const { valid, message } = validateCollegeEmail(form.email, form.college);
+      if (!valid && message) return message;
+    }
     if (form.password.length < 6) return 'Password must be at least 6 characters';
     if (form.password !== confirmPass) return 'Passwords do not match';
     if (!form.phone.trim())   return 'Phone number is required';
-    if (!form.college.trim()) return 'College name is required';
     return null;
   };
 
@@ -109,6 +128,16 @@ export default function RegisterPage({ navigate }) {
             <label>College Email</label>
             <input className="input" type="email" placeholder="you@college.edu"
               value={form.email} onChange={set('email')} />
+            {/* Domain hint — shown when college is filled but email is still empty */}
+            {domainHint && !form.email && (
+              <p className="field-hint-msg">💡 {domainHint}</p>
+            )}
+            {/* Live domain validation feedback */}
+            {form.email && form.role !== 'admin' && form.college && (
+              emailValidation.valid
+                ? <p className="field-success-msg">✓ Valid college email</p>
+                : <p className="field-error-msg">⚠ {emailValidation.message}</p>
+            )}
           </div>
 
           <div className="grid-2">

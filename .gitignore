@@ -18,3 +18,5 @@ Thumbs.db
 dist/
 build/
 frontend-not main/
+backend/incidents_backup
+backend/alerts_backup

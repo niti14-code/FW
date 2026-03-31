@@ -1,601 +1,247 @@
 import React, { useState, useEffect } from 'react';
+import * as api from '../services/api.js';
+import { useAuth } from '../context/AuthContext.jsx';
 
-/* ─── inline styles ──────────────────────────────────────────────── */
-const css = `
-  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
-
-  .ir-wrap {
-    max-width: 680px; margin: 0 auto;
-    padding: 44px 24px 100px;
-    font-family: 'Sora', sans-serif;
-    color: rgba(255,255,255,0.88);
-  }
-
-  .ir-eyebrow {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.2em;
-    text-transform: uppercase; color: #ef4444; margin-bottom: 8px;
-  }
-  .ir-title {
-    font-family: 'Instrument Serif', serif;
-    font-size: 34px; font-weight: 400; margin: 0 0 8px;
-    color: rgba(255,255,255,0.92);
-  }
-  .ir-sub { font-size: 13px; color: rgba(255,255,255,0.38); margin-bottom: 32px; }
-
-  /* banner */
-  .ir-banner {
-    display: flex; align-items: flex-start; gap: 10px;
-    padding: 14px 16px; border-radius: 12px;
-    font-size: 13px; font-weight: 500; margin-bottom: 18px;
-    animation: ir-fade 0.2s ease;
-  }
-  @keyframes ir-fade { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
-  .ir-banner-err { background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.25); color:#fca5a5; }
-  .ir-banner-ok  { background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); color:#86efac; }
-
-  /* card */
-  .ir-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 18px; padding: 24px; margin-bottom: 20px;
-  }
-  .ir-card-title {
-    font-size: 15px; font-weight: 700; margin-bottom: 20px;
-    color: rgba(255,255,255,0.9);
-    display: flex; align-items: center; gap: 10px;
-  }
-  .ir-card-icon {
-    width: 30px; height: 30px; border-radius: 8px;
-    background: rgba(239,68,68,0.15);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
-  }
-
-  /* field */
-  .ir-field { margin-bottom: 16px; }
-  .ir-label {
-    display: block; font-size: 11px; font-weight: 700;
-    letter-spacing: 0.08em; text-transform: uppercase;
-    color: rgba(255,255,255,0.38); margin-bottom: 7px;
-  }
-  .ir-input, .ir-select, .ir-textarea {
-    width: 100%; box-sizing: border-box;
-    padding: 11px 14px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 10px;
-    font-family: 'Sora', sans-serif; font-size: 13px;
-    color: rgba(255,255,255,0.88);
-    outline: none; transition: border-color 0.2s, box-shadow 0.2s;
-  }
-  .ir-input:focus, .ir-select:focus, .ir-textarea:focus {
-    border-color: rgba(239,68,68,0.5);
-    box-shadow: 0 0 0 3px rgba(239,68,68,0.08);
-  }
-  .ir-input::placeholder, .ir-textarea::placeholder { color: rgba(255,255,255,0.2); }
-  .ir-select option { background: #1a1a2e; }
-  .ir-textarea { resize: vertical; min-height: 100px; }
-  .ir-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-  /* ride picker */
-  .ir-ride-list { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
-  .ir-ride-option {
-    display: flex; align-items: center; gap: 12px;
-    padding: 12px 14px;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 10px; cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-  }
-  .ir-ride-option:hover { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.04); }
-  .ir-ride-selected { border-color: rgba(239,68,68,0.5) !important; background: rgba(239,68,68,0.07) !important; }
-  .ir-ride-check {
-    width: 20px; height: 20px; border-radius: 50%;
-    border: 1.5px solid rgba(255,255,255,0.15);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700; color: #ef4444; flex-shrink: 0;
-  }
-  .ir-ride-selected .ir-ride-check { border-color: #ef4444; background: rgba(239,68,68,0.15); }
-  .ir-ride-name { font-size: 13px; font-weight: 600; }
-  .ir-ride-meta { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 2px; }
-  .ir-no-rides { font-size: 13px; color: rgba(255,255,255,0.3); padding: 12px 0; }
-
-  /* severity chips */
-  .ir-severity-row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .ir-sev-chip {
-    padding: 7px 16px; border-radius: 8px;
-    font-size: 12px; font-weight: 700;
-    cursor: pointer; transition: all 0.15s;
-    border: 1.5px solid transparent;
-  }
-  .ir-sev-low     { background: rgba(34,197,94,0.1);  color: #86efac; border-color: rgba(34,197,94,0.2); }
-  .ir-sev-medium  { background: rgba(245,158,11,0.1); color: #fcd34d; border-color: rgba(245,158,11,0.2); }
-  .ir-sev-high    { background: rgba(239,68,68,0.1);  color: #fca5a5; border-color: rgba(239,68,68,0.2); }
-  .ir-sev-critical{ background: rgba(220,38,38,0.15); color: #f87171; border-color: rgba(220,38,38,0.4); }
-  .ir-sev-active  { transform: scale(1.05); filter: brightness(1.3); }
-
-  /* type chips */
-  .ir-type-row { display: flex; gap: 8px; flex-wrap: wrap; }
-  .ir-type-chip {
-    padding: 7px 14px; border-radius: 8px;
-    font-size: 12px; font-weight: 600;
-    cursor: pointer; transition: all 0.15s;
-    background: rgba(255,255,255,0.05);
-    border: 1.5px solid rgba(255,255,255,0.08);
-    color: rgba(255,255,255,0.5);
-  }
-  .ir-type-chip:hover { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.8); }
-  .ir-type-active {
-    background: rgba(239,68,68,0.12) !important;
-    border-color: rgba(239,68,68,0.35) !important;
-    color: #fca5a5 !important;
-  }
-
-  /* submit btn */
-  .ir-btn {
-    width: 100%; padding: 13px;
-    background: #ef4444; color: #fff;
-    border: none; border-radius: 12px;
-    font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700;
-    cursor: pointer; transition: background 0.2s, transform 0.15s;
-    margin-top: 6px;
-    box-shadow: 0 4px 16px rgba(239,68,68,0.25);
-  }
-  .ir-btn:hover:not(:disabled) { background: #dc2626; transform: translateY(-1px); }
-  .ir-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-  /* incident history cards */
-  .ir-inc-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 14px; padding: 18px 20px;
-    margin-bottom: 12px; position: relative; overflow: hidden;
-  }
-  .ir-inc-card::before {
-    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-    background: linear-gradient(180deg, #ef4444, rgba(239,68,68,0.2));
-    border-radius: 16px 0 0 16px;
-    opacity: 0;
-    transition: opacity 0.2s;
-  }
-  .ir-inc-card.exported::before { background: linear-gradient(180deg, #22c55e, rgba(34,197,94,0.2)); }
-  .ir-inc-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-  .ir-inc-type { font-size: 14px; font-weight: 700; text-transform: capitalize; }
-  .ir-inc-badge {
-    font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
-    text-transform: uppercase; padding: 3px 10px; border-radius: 20px; flex-shrink: 0;
-  }
-  .ir-badge-open     { background: rgba(245,158,11,0.1); color: #fcd34d; border: 1px solid rgba(245,158,11,0.2); }
-  .ir-badge-exported { background: rgba(34,197,94,0.1);  color: #86efac; border: 1px solid rgba(34,197,94,0.2); }
-  .ir-badge-review   { background: rgba(99,102,241,0.1); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.2); }
-  .ir-badge-resolved { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.4); border: 1px solid rgba(255,255,255,0.1); }
-  .ir-inc-desc { font-size: 13px; color: rgba(255,255,255,0.45); line-height: 1.6; margin-bottom: 10px; }
-  .ir-ref { font-size: 11px; color: #86efac; font-weight: 600; margin-bottom: 10px; }
-  .ir-inc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-  .ir-action-btn {
-    padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
-    cursor: pointer; transition: background 0.15s; border: 1px solid;
-  }
-  .ir-action-evid {
-    background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1);
-    color: rgba(255,255,255,0.5);
-  }
-  .ir-action-evid:hover { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); }
-  .ir-action-export {
-    background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.2); color: #fca5a5;
-  }
-  .ir-action-export:hover { background: rgba(239,68,68,0.15); }
-  .ir-evidence-box { margin-top: 12px; display: flex; gap: 8px; }
-  .ir-evidence-input {
-    flex: 1; padding: 9px 12px;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px; font-family: 'Sora', sans-serif;
-    font-size: 12px; color: rgba(255,255,255,0.8); outline: none;
-  }
-  .ir-evidence-submit {
-    padding: 9px 16px; background: rgba(239,68,68,0.12);
-    border: 1px solid rgba(239,68,68,0.25); border-radius: 8px;
-    color: #fca5a5; font-size: 12px; font-weight: 700; cursor: pointer;
-  }
-
-  .ir-section-label {
-    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
-    text-transform: uppercase; color: rgba(255,255,255,0.25);
-    margin: 0 0 14px;
-  }
-  .ir-tabs { display: flex; gap: 6px; margin-bottom: 28px;
-    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 12px; padding: 5px; }
-  .ir-tab {
-    flex: 1; padding: 10px 0; border: none; border-radius: 9px;
-    font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 600;
-    cursor: pointer; transition: all 0.2s;
-    background: transparent; color: rgba(255,255,255,0.35);
-  }
-  .ir-tab.active { background: #ef4444; color: #fff; box-shadow: 0 2px 12px rgba(239,68,68,0.3); }
-`;
-
-// FIXED: Import from api.js instead of duplicating
-import { 
-  API_BASE, 
-  getToken, 
-  apiFetch,
-  getMyBookings,
-  getRide 
-} from '../services/api.js';
-
-const TYPES = [
-  { key: 'accident',      label: '🚨 Accident' },
-  { key: 'harassment',    label: '⚠ Harassment' },
-  { key: 'theft',         label: '💼 Theft' },
-  { key: 'unsafe_driving',label: '🚗 Unsafe Driving' },
-  { key: 'other',         label: '📋 Other' },
+const SEEKER_INCIDENT_TYPES = [
+  'Rash/Fast Driving',
+  'Driver Behaviour - Rude/Abusive',
+  'Driver Behaviour - Harassment',
+  'Driver Behaviour - Inappropriate',
+  'Route Deviation - Unauthorized',
+  'Route Deviation - Unsafe Area',
+  'Vehicle Condition - Unsafe/Unclean',
+  'Vehicle Condition - Not as Described',
+  'Overcharging / Payment Dispute',
+  'Late Pickup / No Show',
+  'Cancelled Without Notice',
+  'Driver Under Influence',
+  'Physical Safety Threat',
+  'Verbal Abuse / Threats',
+  'Privacy Violation',
+  'Unsafe Driving - Traffic Violations',
+  'Accident / Collision',
+  'Unauthorized Person in Vehicle',
+  'Vehicle Number Mismatch',
+  'Other Safety Concern',
+  'Other',
 ];
 
-const SEVERITIES = [
-  { key: 'low',      label: 'Low' },
-  { key: 'medium',   label: 'Medium' },
-  { key: 'high',     label: 'High' },
-  { key: 'critical', label: '🚨 Critical' },
+const PROVIDER_INCIDENT_TYPES = [
+  'Passenger No Show',
+  'Passenger Rude / Abusive Behaviour',
+  'Passenger Harassment',
+  'Passenger Refused to Pay',
+  'Passenger Cancelled at Last Minute',
+  'Passenger Brought Extra People',
+  'Passenger Damaged Vehicle',
+  'Passenger Under Influence',
+  'Passenger Threatened Driver',
+  'Passenger Privacy Violation',
+  'Fake Booking',
+  'Wrong Pickup Location Given',
+  'Passenger Verbal Abuse',
+  'Passenger Physical Aggression',
+  'Passenger Brought Prohibited Items',
+  'Passenger Inappropriate Behaviour',
+  'Passenger Left Without Confirmation',
+  'Booking Fraud / Identity Mismatch',
+  'Safety Threat by Passenger',
+  'Other',
 ];
 
-function badgeClass(status) {
-  if (status === 'exported_to_authorities') return 'ir-badge-exported';
-  if (status === 'under_review') return 'ir-badge-review';
-  if (status === 'resolved') return 'ir-badge-resolved';
-  return 'ir-badge-open';
-}
-
-/* ─── Main Component ─────────────────────────────────────────────── */
 export default function IncidentReport({ navigate }) {
-  const [tab, setTab] = useState('report');
-  const [incidents, setIncidents] = useState([]);
-  const [pastRides, setPastRides]     = useState([]);
-  const [ridesLoading, setRidesLoading] = useState(false);
-  const [selectedRide, setSelectedRide] = useState(null);
+  const { user } = useAuth();
+  const isProvider = user?.role === 'provider' || user?.role === 'both';
 
-  const [form, setForm] = useState({
-    type: 'other', description: '', severity: 'medium', rideDescription: '',
-  });
+  const [rides,       setRides]       = useState([]);
+  const [rideId,      setRideId]      = useState('');
+  const [type,        setType]        = useState('');
+  const [subject,     setSubject]     = useState('');
+  const [description, setDescription] = useState('');
+  const [severity,    setSeverity]    = useState('Medium');
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState('');
+  const [success,     setSuccess]     = useState(null);
+  const [myIncidents, setMyIncidents] = useState([]);
+  const [tab,         setTab]         = useState('report');
 
-  const [evidence, setEvidence]       = useState('');
-  const [evidenceFor, setEvidenceFor] = useState(null);
-  const [error, setError]             = useState('');
-  const [success, setSuccess]         = useState('');
-  const [submitting, setSubmitting]   = useState(false);
-  const [exportingId, setExportingId] = useState(null);
+  const incidentTypes = isProvider ? PROVIDER_INCIDENT_TYPES : SEEKER_INCIDENT_TYPES;
 
-  function notify(type, msg) {
-    if (type === 'err') setError(msg);
-    else setSuccess(msg);
-    setTimeout(() => { setError(''); setSuccess(''); }, 6000);
-  }
-
-  /* load my incidents */
   useEffect(() => {
-    apiFetch('/incidents/my')
-      .then(d => setIncidents(Array.isArray(d) ? d : []))
-      .catch(() => {});
+    // Load rides for dropdown
+    const loadRides = async () => {
+      try {
+        if (isProvider) {
+          const data = await api.getMyRides();
+          setRides(data || []);
+        } else {
+          const data = await api.getMyBookings();
+          setRides((data || []).filter(b => b.status === 'accepted' || b.rideId?.status === 'completed').map(b => b.rideId).filter(Boolean));
+        }
+      } catch {}
+    };
+    loadRides();
+    api.getMyIncidents().then(setMyIncidents).catch(() => {});
   }, []);
 
-  /* load past rides for the picker */
-  useEffect(() => {
-    if (tab !== 'report') return;
-    setRidesLoading(true);
-    
-    // FIXED: Use only the correct endpoint, remove phantom routes
-    (async () => {
-      try {
-        // FIXED: Use imported API function instead of raw fetch
-        const data = await getMyBookings();
-        const list = Array.isArray(data) ? data : (data.bookings || data.data || []);
-        
-        // Enrich with ride details if needed
-        const enriched = await Promise.all(
-          list.filter(b => b.status !== 'cancelled').map(async (b) => {
-            const ride = b.rideId;
-            if (!ride) return b;
-            const prov = ride.providerId;
-            if (prov && typeof prov === 'object' && prov.name) return b;
-            const rideId = typeof ride === 'object' ? (ride._id || ride.id) : ride;
-            if (!rideId) return b;
-            
-            try {
-              // FIXED: Use imported API function with correct URL
-              const rideData = await getRide(rideId);
-              return { ...b, rideId: rideData.ride || rideData };
-            } catch (_) {}
-            return b;
-          })
-        );
-        
-        setPastRides(enriched);
-        if (enriched.length === 0) {
-          setRidesError('No past rides found. Describe the ride below instead.');
-        }
-      } catch (err) {
-        setRidesError('Could not load your past rides. Please try again.');
-      } finally {
-        setRidesLoading(false);
-      }
-    })();
-  }, [tab]);
-
-  /* submit report */
-  async function handleReport(e) {
+  const submit = async (e) => {
     e.preventDefault();
-    if (!form.description) return notify('err', 'Please describe what happened');
-    setSubmitting(true);
-
-    // Get location
-    let location = undefined;
+    setError('');
+    if (!rideId)      { setError('Please select a ride'); return; }
+    if (!type)        { setError('Please select incident type'); return; }
+    if (!subject.trim())     { setError('Please enter a subject'); return; }
+    if (!description.trim()) { setError('Please describe the incident'); return; }
+    setLoading(true);
     try {
-      location = await new Promise((resolve, reject) =>
-        navigator.geolocation.getCurrentPosition(
-          p => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }),
-          () => resolve(undefined),
-          { timeout: 5000 }
-        )
-      );
-    } catch (_) {}
+      const inc = await api.reportIncident({ rideId, type, subject, description, severity });
+      setSuccess(inc);
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
 
-    try {
-      const payload = {
-        type:            form.type,
-        description:     form.description,
-        severity:        form.severity,
-        rideDescription: selectedRide?.label || form.rideDescription || undefined,
-        rideId:          selectedRide?.rideId || undefined,
-        location,
-      };
-      
-      const res = await apiFetch('/incidents/report', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      });
-      
-      setIncidents(prev => [res.incident, ...prev]);
-      setForm({ type: 'other', description: '', severity: 'medium', rideDescription: '' });
-      setSelectedRide(null);
-      notify('ok', 'Incident reported. Our team will review it shortly.');
-      setTab('history');
-    } catch (err) {
-      notify('err', err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const getRideLabel = (ride) => {
+    if (!ride) return 'Unknown Ride';
+    const pickup = ride.pickup?.label || 'Pickup';
+    const drop   = ride.drop?.label   || 'Drop';
+    const date   = ride.date ? new Date(ride.date).toLocaleDateString('en-IN', { day:'numeric', month:'short' }) : '';
+    const shortId = ride._id?.toString().slice(-6).toUpperCase();
+    return `#${shortId} · ${pickup.split(',')[0]} → ${drop.split(',')[0]} · ${date}`;
+  };
 
-  /* add evidence */
-  async function handleEvidence(id) {
-    if (!evidence.trim()) return;
-    try {
-      await apiFetch(`/incidents/${id}/evidence`, {
-        method: 'POST',
-        body: JSON.stringify({ evidence: [evidence.trim()] }),
-      });
-      setEvidence('');
-      setEvidenceFor(null);
-      notify('ok', 'Evidence submitted.');
-    } catch (err) {
-      notify('err', err.message);
-    }
-  }
+  const selectedRide = rides.find(r => r._id === rideId || r._id?.toString() === rideId);
 
-  /* export */
-  async function handleExport(id) {
-    setExportingId(id);
-    try {
-      const res = await apiFetch(`/incidents/${id}/export`, { method: 'POST' });
-      setIncidents(prev => prev.map(i => i._id === id
-        ? { ...i, status: 'exported_to_authorities', exportRef: res.exportRef }
-        : i
-      ));
-      notify('ok', `Exported to authorities. Reference: ${res.exportRef}`);
-    } catch (err) {
-      notify('err', err.message);
-    } finally {
-      setExportingId(null);
-    }
-  }
+  if (success) return (
+    <div className="page-wrap fade-up" style={{ textAlign:'center', paddingTop:60 }}>
+      <div style={{ fontSize:64 }}>✅</div>
+      <h2 className="heading mt-20" style={{ color:'#2dd4a0', fontSize:28 }}>Incident Reported</h2>
+      <p className="text-muted mt-8 text-sm">Reference ID: <strong style={{ color:'#f5a623' }}>#{success.incident?._id?.slice(-8).toUpperCase() || 'N/A'}</strong></p>
+      <p className="text-muted mt-4 text-sm">Admin will review and take action within 24 hours.</p>
+      <div style={{ display:'flex', gap:12, justifyContent:'center', marginTop:24 }}>
+        <button className="btn btn-ghost" onClick={() => { setSuccess(null); setRideId(''); setType(''); setSubject(''); setDescription(''); setSeverity('Medium'); }}>Report Another</button>
+        <button className="btn btn-primary" onClick={() => navigate('dashboard')}>Back to Home</button>
+      </div>
+    </div>
+  );
 
   return (
-    <>
-      <style>{css}</style>
-      <div className="ir-wrap">
+    <div className="page-wrap fade-up">
+      <p className="eyebrow mb-8">Safety</p>
+      <h1 className="heading mb-4" style={{ fontSize:28, color:'#fff' }}>Incident Report</h1>
+      <p className="text-muted mb-20 text-sm">Report any safety concern, misconduct, or issue with a ride or {isProvider ? 'passenger' : 'driver'}.</p>
 
-        <p className="ir-eyebrow">Safety</p>
-        <h1 className="ir-title">Incident Reports</h1>
-        <p className="ir-sub">Report safety incidents. Your report is private and reviewed by our team.</p>
-
-        {error   && <div className="ir-banner ir-banner-err">⚠ {error}</div>}
-        {success && <div className="ir-banner ir-banner-ok">✓ {success}</div>}
-
-        {/* Tabs */}
-        <div className="ir-tabs">
-          <button className={`ir-tab${tab === 'report' ? ' active' : ''}`} onClick={() => setTab('report')}>
-            🚨 Report
+      {/* Tabs */}
+      <div style={{ display:'flex', gap:4, marginBottom:24, background:'#111318', borderRadius:10, padding:4 }}>
+        {['report', 'history'].map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ flex:1, padding:'10px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:600, fontSize:13,
+              background: tab === t ? '#f5a623' : 'transparent', color: tab === t ? '#000' : '#888' }}>
+            {t === 'report' ? '📝 New Report' : '📋 My Reports'}
           </button>
-          <button className={`ir-tab${tab === 'history' ? ' active' : ''}`} onClick={() => setTab('history')}>
-            📋 My Reports {incidents.length > 0 && `(${incidents.length})`}
-          </button>
-        </div>
-
-        {/* ── Report Tab ── */}
-        {tab === 'report' && (
-          <div className="ir-card">
-            <div className="ir-card-title">
-              <div className="ir-card-icon">🚨</div>
-              Report an Incident
-            </div>
-
-            <form onSubmit={handleReport}>
-
-              {/* Ride picker */}
-              <div className="ir-field">
-                <label className="ir-label">Which ride? (optional)</label>
-                {ridesLoading && <p className="ir-no-rides">Loading your past rides…</p>}
-                {!ridesLoading && pastRides.length === 0 && (
-                  <div>
-                    <p className="ir-no-rides">No past rides found. Describe the ride below instead.</p>
-                    <input className="ir-input" placeholder="e.g. RNS to Marathalli on 23 Mar, around 9am"
-                      value={form.rideDescription}
-                      onChange={e => setForm(f => ({ ...f, rideDescription: e.target.value }))} />
-                  </div>
-                )}
-                {!ridesLoading && pastRides.length > 0 && (
-                  <div className="ir-ride-list">
-                    {pastRides.slice(0, 6).map((booking, i) => {
-                      const ride    = booking.rideId || booking;
-                      const prov    = ride.providerId;
-                      const provName = prov && typeof prov === 'object' && prov.name
-                        ? prov.name : 'Unknown Provider';
-                      const rideDate = ride.date || booking.date;
-                      const dateStr  = rideDate
-                        ? new Date(rideDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-                        : '';
-                      const rideId   = typeof ride === 'object' ? (ride._id || ride.id) : ride;
-                      const label    = `${provName}${dateStr ? ` · ${dateStr}` : ''}`;
-                      const isSelected = selectedRide?.rideId === String(rideId);
-                      return (
-                        <div key={booking._id || i}
-                          className={`ir-ride-option${isSelected ? ' ir-ride-selected' : ''}`}
-                          onClick={() => setSelectedRide(isSelected ? null : {
-                            rideId: rideId?.toString ? rideId.toString() : String(rideId),
-                            label,
-                          })}>
-                          <div className="ir-ride-check">{isSelected ? '✓' : ''}</div>
-                          <div>
-                            <div className="ir-ride-name">{provName}</div>
-                            <div className="ir-ride-meta">{dateStr || 'Recent ride'}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                    {/* Manual fallback if none match */}
-                    <div style={{ marginTop: 8 }}>
-                      <input className="ir-input" placeholder="Or describe the ride manually (optional)"
-                        value={form.rideDescription}
-                        onChange={e => setForm(f => ({ ...f, rideDescription: e.target.value }))} />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Incident type */}
-              <div className="ir-field">
-                <label className="ir-label">Type of Incident *</label>
-                <div className="ir-type-row">
-                  {TYPES.map(t => (
-                    <button key={t.key} type="button"
-                      className={`ir-type-chip${form.type === t.key ? ' ir-type-active' : ''}`}
-                      onClick={() => setForm(f => ({ ...f, type: t.key }))}>
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Severity */}
-              <div className="ir-field">
-                <label className="ir-label">Severity</label>
-                <div className="ir-severity-row">
-                  {SEVERITIES.map(s => (
-                    <button key={s.key} type="button"
-                      className={`ir-sev-chip ir-sev-${s.key}${form.severity === s.key ? ' ir-sev-active' : ''}`}
-                      onClick={() => setForm(f => ({ ...f, severity: s.key }))}>
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Description */}
-              <div className="ir-field">
-                <label className="ir-label">What happened? *</label>
-                <textarea className="ir-textarea" rows={5}
-                  placeholder="Describe the incident in detail. Include time, location, and any relevant details…"
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
-              </div>
-
-              <button className="ir-btn" type="submit" disabled={submitting}>
-                {submitting ? 'Submitting…' : '🚨 Submit Report'}
-              </button>
-            </form>
-          </div>
-        )}
-
-        {/* ── History Tab ── */}
-        {tab === 'history' && (
-          <div>
-            <div className="ir-section-label">
-              {incidents.length} report{incidents.length !== 1 ? 's' : ''}
-            </div>
-
-            {incidents.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '48px 20px', color: 'rgba(255,255,255,0.25)', fontSize: 13 }}>
-                <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
-                No reports yet.
-              </div>
-            ) : incidents.map(inc => (
-              <div key={inc._id} className={`ir-inc-card${inc.status === 'exported_to_authorities' ? ' exported' : ''}`}>
-                <div className="ir-inc-header">
-                  <div>
-                    <div className="ir-inc-type">{inc.type.replace(/_/g, ' ')}</div>
-                    <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 3 }}>
-                      {inc.severity?.toUpperCase()} &nbsp;·&nbsp;
-                      {new Date(inc.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                    </div>
-                  </div>
-                  <span className={`ir-inc-badge ${badgeClass(inc.status)}`}>
-                    {inc.status.replace(/_/g, ' ')}
-                  </span>
-                </div>
-
-                <p className="ir-inc-desc">{inc.description}</p>
-
-                {inc.exportRef && (
-                  <div className="ir-ref">📤 Ref: {inc.exportRef}</div>
-                )}
-
-                {inc.evidence?.length > 0 && (
-                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.3)', marginBottom: 8 }}>
-                    {inc.evidence.length} piece{inc.evidence.length !== 1 ? 's' : ''} of evidence attached
-                  </div>
-                )}
-
-                <div className="ir-inc-actions">
-                  <button className="ir-action-btn ir-action-evid"
-                    onClick={() => setEvidenceFor(evidenceFor === inc._id ? null : inc._id)}>
-                    {evidenceFor === inc._id ? 'Cancel' : '+ Add Evidence'}
-                  </button>
-                  {inc.status !== 'exported_to_authorities' && (
-                    <button className="ir-action-btn ir-action-export"
-                      disabled={exportingId === inc._id}
-                      onClick={() => handleExport(inc._id)}>
-                      {exportingId === inc._id ? 'Exporting…' : '📤 Export to Authorities'}
-                    </button>
-                  )}
-                </div>
-
-                {evidenceFor === inc._id && (
-                  <div className="ir-evidence-box">
-                    <input className="ir-evidence-input"
-                      placeholder="Paste a URL, description, or file link…"
-                      value={evidence}
-                      onChange={e => setEvidence(e.target.value)} />
-                    <button className="ir-evidence-submit" onClick={() => handleEvidence(inc._id)}>
-                      Submit
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
+        ))}
       </div>
-    </>
+
+      {tab === 'history' && (
+        <div>
+          {myIncidents.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">📋</div>
+              <div className="empty-title" style={{ color:'#fff' }}>No incidents reported</div>
+            </div>
+          ) : myIncidents.map(inc => (
+            <div key={inc._id} className="card" style={{ marginBottom:12, padding:16 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+                <span style={{ color:'#f5a623', fontWeight:700, fontSize:13 }}>#{inc._id.slice(-8).toUpperCase()}</span>
+                <span style={{ fontSize:12, padding:'3px 10px', borderRadius:99, background:
+                  inc.status === 'resolved' ? '#1e3a1e' : inc.status === 'exported_to_authorities' ? '#1a2a3a' : '#2a1a0a',
+                  color: inc.status === 'resolved' ? '#2dd4a0' : inc.status === 'exported_to_authorities' ? '#a0c4f4' : '#f5a623' }}>
+                  {inc.status?.replace(/_/g, ' ') || 'open'}
+                </span>
+              </div>
+              <div style={{ color:'#fff', fontWeight:600, marginBottom:4 }}>{inc.type}</div>
+              {inc.subject && <div style={{ color:'#aaa', fontSize:13, marginBottom:4 }}>{inc.subject}</div>}
+              <div style={{ color:'#666', fontSize:12 }}>{new Date(inc.createdAt).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {tab === 'report' && (
+        <form onSubmit={submit}>
+          {error && <div className="alert alert-error mb-16">{error}</div>}
+
+          {/* Ride Selection */}
+          <div className="card" style={{ padding:20, marginBottom:16 }}>
+            <h3 style={{ color:'#fff', marginBottom:4, fontSize:16 }}>🚗 Select Ride</h3>
+            <p style={{ color:'#888', fontSize:12, marginBottom:14 }}>Choose the ride this incident occurred on</p>
+            {rides.length === 0 ? (
+              <div style={{ color:'#666', fontSize:13, padding:'12px', background:'#0d0f14', borderRadius:8, textAlign:'center' }}>
+                No rides found. You need to have an active or completed ride to report an incident.
+              </div>
+            ) : (
+              <select className="input" value={rideId} onChange={e => setRideId(e.target.value)} required>
+                <option value="">— Select a ride —</option>
+                {rides.map(r => (
+                  <option key={r._id} value={r._id}>{getRideLabel(r)}</option>
+                ))}
+              </select>
+            )}
+            {/* Show ride ID prominently */}
+            {selectedRide && (
+              <div style={{ marginTop:10, background:'#1a1a2e', borderRadius:8, padding:'8px 14px', display:'flex', alignItems:'center', gap:8 }}>
+                <span style={{ color:'#888', fontSize:12 }}>Ride ID:</span>
+                <span style={{ color:'#f5a623', fontWeight:800, fontSize:14, fontFamily:'monospace', letterSpacing:1 }}>
+                  #{selectedRide._id?.toString().slice(-8).toUpperCase()}
+                </span>
+                <span style={{ color:'#666', fontSize:11 }}>(share this ID with admin)</span>
+              </div>
+            )}
+          </div>
+
+          {/* Incident Type */}
+          <div className="card" style={{ padding:20, marginBottom:16 }}>
+            <h3 style={{ color:'#fff', marginBottom:4, fontSize:16 }}>⚠️ Incident Type</h3>
+            <p style={{ color:'#888', fontSize:12, marginBottom:14 }}>Select the type of incident that occurred ({incidentTypes.length} options)</p>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+              {incidentTypes.map(t => (
+                <button key={t} type="button" onClick={() => setType(t)}
+                  style={{ padding:'10px 12px', borderRadius:8, border:`1px solid ${type === t ? '#f5a623' : '#2a2d35'}`,
+                    background: type === t ? 'rgba(245,166,35,0.15)' : '#0d0f14', color: type === t ? '#f5a623' : '#888',
+                    fontSize:12, fontWeight: type === t ? 700 : 400, cursor:'pointer', textAlign:'left',
+                    transition:'all 0.15s' }}>
+                  {type === t && '✓ '}{t}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Subject */}
+          <div className="card" style={{ padding:20, marginBottom:16 }}>
+            <h3 style={{ color:'#fff', marginBottom:4, fontSize:16 }}>📌 Subject</h3>
+            <p style={{ color:'#888', fontSize:12, marginBottom:14 }}>Write a short summary of the incident (max 100 characters)</p>
+            <input className="input" placeholder="e.g. Driver was rude and took wrong route"
+              value={subject} onChange={e => setSubject(e.target.value.slice(0, 100))} required />
+            <div style={{ textAlign:'right', color:'#666', fontSize:11, marginTop:4 }}>{subject.length}/100</div>
+          </div>
+
+          {/* Description */}
+          <div className="card" style={{ padding:20, marginBottom:16 }}>
+            <h3 style={{ color:'#fff', marginBottom:4, fontSize:16 }}>📝 Full Description</h3>
+            <p style={{ color:'#888', fontSize:12, marginBottom:14 }}>Explain in detail what happened — time, location, what was said/done</p>
+            <textarea className="input" placeholder="Describe everything that happened in detail..."
+              value={description} onChange={e => setDescription(e.target.value)}
+              rows={6} style={{ resize:'vertical', minHeight:140 }} required />
+            <div style={{ textAlign:'right', color:'#666', fontSize:11, marginTop:4 }}>{description.length} characters</div>
+          </div>
+
+
+          <button type="submit" className={`btn btn-primary btn-lg btn-full ${loading ? 'btn-loading' : ''}`} disabled={loading || rides.length === 0}>
+            {!loading && '🚨 Submit Incident Report'}
+          </button>
+          <p style={{ color:'#666', fontSize:11, textAlign:'center', marginTop:12 }}>
+            False reports may result in account suspension. Report only genuine incidents.
+          </p>
+        </form>
+      )}
+    </div>
   );
 }

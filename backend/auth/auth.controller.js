@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
 const User   = require('../users/users.model');
+const { validateCollegeEmail } = require('../config/collegeDomains');
 
 // ── Register ──────────────────────────────────────────────────────
 const register = async (req, res) => {
@@ -12,6 +13,14 @@ const register = async (req, res) => {
     } = req.body;
 
     console.log('🔍 Registration attempt:', { email, name, role });
+
+    // ── College domain validation (skip for admin) ──
+    if (role !== 'admin') {
+      const { valid, message } = validateCollegeEmail(email, college, role);
+      if (!valid) {
+        return res.status(400).json({ message: message || 'Please use your official college email address' });
+      }
+    }
 
     // Case-insensitive duplicate check
     const existing = await User.findOne({
