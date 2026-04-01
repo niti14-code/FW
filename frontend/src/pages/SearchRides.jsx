@@ -70,7 +70,9 @@ export default function SearchRides({ navigate }) {
     dropLat: '', 
     dropLng: '', 
     maxDistance: 5000, 
-    date: '' 
+    date: '',
+    pickupLabel: '',  // Store pickup location label
+    dropLabel: ''     // Store drop location label
   });
   
   const [rides, setRides] = useState([]);
@@ -182,10 +184,10 @@ export default function SearchRides({ navigate }) {
     setSuggestions(prev => ({ ...prev, showExpandOption: false }));
   };
 
-  const book = async (rideId) => {
+  const book = async (rideId, seatsRequested = 1) => {
     setBookingMap(m => ({ ...m, [rideId]: { loading: true } }));
     try {
-      await api.requestBooking(rideId);
+      await api.requestBooking(rideId, seatsRequested);
       setBookingMap(m => ({ ...m, [rideId]: { status: 'pending' } }));
     } catch (err) {
       setBookingMap(m => ({ ...m, [rideId]: { error: err.message } }));
@@ -230,14 +232,14 @@ export default function SearchRides({ navigate }) {
               <label>Pickup Location *</label>
               {locationConfig.pickupIsCollege ? (
                 <CollegeLocationSearch
-                  value={filters.lat && filters.lng ? `${filters.lat}, ${filters.lng}` : ''}
-                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, lat: lat.toString(), lng: lng.toString() }))}
+                  value={filters.pickupLabel || ''}
+                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, pickupLabel: label, lat: lat.toString(), lng: lng.toString() }))}
                   placeholder="Search for college pickup location..."
                 />
               ) : (
                 <LocationSearch
-                  value={filters.lat && filters.lng ? `${filters.lat}, ${filters.lng}` : ''}
-                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, lat: lat.toString(), lng: lng.toString() }))}
+                  value={filters.pickupLabel || ''}
+                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, pickupLabel: label, lat: lat.toString(), lng: lng.toString() }))}
                   placeholder="Search for your pickup location..."
                   excludeColleges={true}
                 />
@@ -249,14 +251,14 @@ export default function SearchRides({ navigate }) {
               <label>Drop Location <span style={{color: 'rgba(255,255,255,0.4)', fontWeight: 400}}>(optional)</span></label>
               {locationConfig.dropIsCollege ? (
                 <CollegeLocationSearch
-                  value={filters.dropLat && filters.dropLng ? `${filters.dropLat}, ${filters.dropLng}` : ''}
-                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLat: lat.toString(), dropLng: lng.toString() }))}
+                  value={filters.dropLabel || ''}
+                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
                   placeholder="Search for college destination..."
                 />
               ) : (
                 <LocationSearch
-                  value={filters.dropLat && filters.dropLng ? `${filters.dropLat}, ${filters.dropLng}` : ''}
-                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLat: lat.toString(), dropLng: lng.toString() }))}
+                  value={filters.dropLabel || ''}
+                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
                   placeholder="Search for your destination (optional)..."
                   excludeColleges={true}
                 />

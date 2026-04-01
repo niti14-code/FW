@@ -1,6 +1,8 @@
 // backend/rides/rides.controller.js - CORRECTED
 const Ride = require('./rides.model');
+const Booking = require('../bookings/bookings.model');
 const User = require('../users/users.model');
+const Notification = require('../notifications/notifications.model');
 
 // ================= CREATE RIDE =================
 exports.createRide = async (req, res) => {
@@ -81,17 +83,36 @@ exports.searchRides = async (req, res) => {
       seatsAvailable: { $gt: 0 }  // Only rides with seats available
     };
 
-    // Add date filter if provided
+    const now = new Date();
+    const currentHour = now.getHours();
+
+    // Add specific date filter if provided
     if (date) {
       const searchDate = new Date(date);
       const nextDay = new Date(searchDate);
       nextDay.setDate(nextDay.getDate() + 1);
+      nextDay.setHours(0, 0, 0, 0); // Set to start of next day
       
       query.date = {
         $gte: searchDate,
         $lt: nextDay
       };
       console.log('Date filter:', searchDate, 'to', nextDay);
+    } else {
+      // No date provided - show future rides only
+      // If it's after 10 AM, show rides from current time onwards
+      // If it's before 10 AM, show rides from 10 AM onwards
+      const today = new Date();
+      if (currentHour >= 10) {
+        // After 10 AM - show rides from current time onwards
+        query.date = { $gte: today };
+        console.log('After 10 AM - showing rides from now:', today);
+      } else {
+        // Before 10 AM - show rides from 10 AM onwards
+        today.setHours(10, 0, 0, 0); // Set to 10 AM today
+        query.date = { $gte: today };
+        console.log('Before 10 AM - showing rides from 10 AM:', today);
+      }
     }
 
     // If coordinates provided, use geo-proximity search
@@ -268,6 +289,44 @@ exports.pickupPassenger = async (req, res) => {
     ride.passengerPickedUpAt = new Date();
     await ride.save();
 
+    // Get accepted bookings to notify passengers
+    const acceptedBookings = await Booking.find({ 
+      rideId: ride._id, 
+      status: 'accepted' 
+    }).populate('seekerId', 'name fcmToken');
+
+    // Send notifications to all accepted passengers
+    for (const booking of acceptedBookings) {
+      try {
+        const passengerNotification = new Notification({
+          userId: booking.seekerId._id,
+          userType: 'seeker',
+          type: 'PASSENGER_PICKED_UP',
+          title: '🚗 Ride Has Started — Pickup Confirmed',
+          body: `Your provider has picked you up! Travelling from ${ride.pickup?.name || 'pickup'} to ${ride.drop?.name || 'drop'}.`,
+          data: {
+            rideId: ride._id,
+            bookingId: booking._id,
+            pickup: ride.pickup,
+            drop: ride.drop,
+            date: ride.date,
+            time: ride.time,
+            pickedUpAt: ride.passengerPickedUpAt
+          }
+        });
+
+        await passengerNotification.save();
+
+        // Send push notification if FCM token available
+        if (booking.seekerId.fcmToken) {
+          // TODO: Implement FCM push notification
+          console.log(`Would send push notification to ${booking.seekerId.name}`);
+        }
+      } catch (notifErr) {
+        console.error('Failed to create passenger notification:', notifErr);
+      }
+    }
+
     // Emit socket event
     const io = req.app.get('io');
     if (io) {
@@ -298,6 +357,45 @@ exports.dropPassenger = async (req, res) => {
     ride.passengerDroppedAt = new Date();
     ride.completedAt = new Date();
     await ride.save();
+
+    // Get accepted bookings to notify passengers
+    const acceptedBookings = await Booking.find({ 
+      rideId: ride._id, 
+      status: 'accepted' 
+    }).populate('seekerId', 'name fcmToken');
+
+    // Send notifications to all accepted passengers
+    for (const booking of acceptedBookings) {
+      try {
+        const passengerNotification = new Notification({
+          userId: booking.seekerId._id,
+          userType: 'seeker',
+          type: 'PASSENGER_DROPPED',
+          title: '📍 You Have Been Dropped Off',
+          body: `Successfully reached ${ride.drop?.name || 'destination'} from ${ride.pickup?.name || 'pickup'} on ${new Date(ride.date).toLocaleDateString('en-IN')}.`,
+          data: {
+            rideId: ride._id,
+            bookingId: booking._id,
+            pickup: ride.pickup,
+            drop: ride.drop,
+            date: ride.date,
+            time: ride.time,
+            droppedAt: ride.passengerDroppedAt,
+            completedAt: ride.completedAt
+          }
+        });
+
+        await passengerNotification.save();
+
+        // Send push notification if FCM token available
+        if (booking.seekerId.fcmToken) {
+          // TODO: Implement FCM push notification
+          console.log(`Would send drop notification to ${booking.seekerId.name}`);
+        }
+      } catch (notifErr) {
+        console.error('Failed to create drop notification:', notifErr);
+      }
+    }
 
     // Update provider stats
     const user = await User.findById(req.user.userId);

@@ -627,3 +627,8 @@ export const createCommunityPost = (data) =>
 
 export const toggleCommunityLike = (postId) =>
   request(`/community/${postId}/like`, { method: 'PATCH' });
+export const addCommunityReply = (postId, content) =>
+  request(`/community/${postId}/reply`, {
+    method: 'POST',
+    body: JSON.stringify({ content })
+  });

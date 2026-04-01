@@ -26,7 +26,26 @@ const CITY_PRESETS = [
   { label: 'Indore', lat: 22.7196, lng: 75.8577 }
 ];
 
-const EMPTY = { pickupLabel:'', pickupLat:'', pickupLng:'', dropLabel:'', dropLat:'', dropLng:'', date:'', time:'', seatsAvailable:2, costPerSeat:'' };
+const EMPTY = { 
+  pickupLabel:'', 
+  pickupLat:'', 
+  pickupLng:'', 
+  dropLabel:'', 
+  dropLat:'', 
+  dropLng:'', 
+  date:'', 
+  time:'', 
+  seatsAvailable:4, 
+  costPerSeat:'',
+  vehicleType: 'car' // Default vehicle type
+};
+
+const VEHICLE_TYPES = [
+  { value: 'motorcycle', label: '🏍️ Motorcycle', capacity: 1 },
+  { value: 'car', label: '🚗 Car', capacity: 4 },
+  { value: 'suv', label: '🚙 SUV', capacity: 6 },
+  { value: 'xuv', label: '🚐 XUV', capacity: 6 }
+];
 
 // Time-based location switching logic
 const getTimeBasedLocationConfig = () => {
@@ -190,7 +209,7 @@ export default function CreateRide({ navigate }) {
       <form onSubmit={submit}>
         {error && <div className="alert alert-error mb-20">{error}</div>}
         {locationConfig.message && (
-          <div className="alert alert-info mb-20" style={{backgroundColor: '#e3f2fd', color: '#1976d2', border: '1px solid #90caf9'}}>
+          <div className="alert alert-info mb-20">
             🕐 {locationConfig.message}
           </div>
         )}
@@ -266,6 +285,24 @@ export default function CreateRide({ navigate }) {
         <div className="field mb-20">
           <label>Cost per Seat (₹) ✶</label>
           <input className="input" type="number" min="0" step="10" value={form.costPerSeat} onChange={set('costPerSeat')} placeholder="e.g. 50" required />
+        </div>
+
+        {/* ── Vehicle Type ── */}
+        <div className="field mb-20">
+          <label>Vehicle Type ✶</label>
+          <div className="vehicle-type-grid">
+            {VEHICLE_TYPES.map(vehicle => (
+              <div 
+                key={vehicle.value}
+                className={`vehicle-type-card ${form.vehicleType === vehicle.value ? 'selected' : ''}`}
+                onClick={() => setForm(f => ({ ...f, vehicleType: vehicle.value, seatsAvailable: vehicle.capacity }))}
+              >
+                <div className="vehicle-icon">{vehicle.label.split(' ')[0]}</div>
+                <div className="vehicle-name">{vehicle.label.split(' ')[1]}</div>
+                <div className="vehicle-capacity">Max {vehicle.capacity} seats</div>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* ── Earnings preview ── */}

@@ -31,12 +31,18 @@ export default function NotificationsPage({ navigate }) {
   const [requests,  setRequests]  = useState([]);
   const [alerts,    setAlerts]    = useState([]);
   const [incidents, setIncidents] = useState([]);
+  const [systemNotifications, setSystemNotifications] = useState([]);
   const [loading,   setLoading]   = useState(true);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
+        // Load user-specific notifications from backend
+        const notifData = await api.getMyNotifications({ limit: 50 });
+        setSystemNotifications(notifData.notifications || []);
+        
+        // Load existing booking/ride data
         if (isSeeker) {
           const d = await api.getMyBookings();
           setBookings(d || []);
@@ -234,6 +240,43 @@ export default function NotificationsPage({ navigate }) {
         time: inc.updatedAt || inc.createdAt,
         action: () => navigate('incident-report'), actionLabel: 'View Report'
       });
+    });
+
+    // ── SYSTEM NOTIFICATIONS ─────────────────────────────────────
+    systemNotifications.forEach(notif => {
+      // Handle specific notification types from backend
+      if (notif.type === 'PASSENGER_PICKED_UP') {
+        notifs.push({
+          id: notif._id,
+          type: 'passenger_picked_up',
+          title: notif.title,
+          body: notif.body,
+          time: notif.createdAt,
+          action: () => navigate('my-bookings'),
+          actionLabel: 'Track Ride'
+        });
+      } else if (notif.type === 'PASSENGER_DROPPED') {
+        notifs.push({
+          id: notif._id,
+          type: 'passenger_dropped',
+          title: notif.title,
+          body: notif.body,
+          time: notif.createdAt,
+          action: () => navigate('my-bookings'),
+          actionLabel: 'View Ride'
+        });
+      } else {
+        // Handle generic notification types
+        notifs.push({
+          id: notif._id,
+          type: notif.type?.toLowerCase() || 'system',
+          title: notif.title,
+          body: notif.body,
+          time: notif.createdAt,
+          action: () => navigate('dashboard'),
+          actionLabel: 'View'
+        });
+      }
     });
 
     // Sort newest first

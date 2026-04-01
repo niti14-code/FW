@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 
-const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000'|| window.location.origin;
+// Strip any trailing /api from the env var, then always add /api ourselves
+const _rawBase = import.meta.env?.VITE_API_URL || 'http://localhost:5000';
+const API_BASE = _rawBase.replace(/\/api\/?$/, '') + '/api';
 
 function getToken() { return localStorage.getItem('cr_token') || ''; }
 
@@ -892,19 +894,18 @@ function IncidentsTab({ notify }) {
   const [sf,setSf]=useState('');
   const [acting,setActing]=useState({});
 
- useEffect(() => {
-  setLoading(true);
-
-  apiFetch('/admin/kyc') 
-    .then(data => {
-      setUsers(Array.isArray(data) ? data : []); 
-    })
-    .catch(e => {
-      console.error('Failed to fetch KYC:', e);
-      notify(e.message, 'err');
-    })
-    .finally(() => setLoading(false));
-}, []);
+  useEffect(() => {
+    setLoading(true);
+    apiFetch('/admin/incidents')
+      .then(data => {
+        setIncidents(Array.isArray(data) ? data : (data?.incidents || []));
+      })
+      .catch(e => {
+        console.error('Failed to fetch incidents:', e);
+        notify(e.message, 'err');
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   async function upd(id,status) {
     setActing(a=>({...a,[id]:true}));

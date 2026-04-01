@@ -87,4 +87,31 @@ const toggleLike = async (req, res) => {
   }
 };
 
-module.exports = { getPosts, createPost, toggleLike };
+// ── ADD a reply to a post ─────────────────────────────────────────
+const addReply = async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: 'Reply content is required' });
+    }
+
+    const user = await User.findById(req.user.userId).select('name college');
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const post = await CommunityPost.findById(req.params.id);
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+
+    const reply = { author: req.user.userId, authorName: user.name, content: content.trim() };
+    post.replies.push(reply);
+    await post.save();
+
+    // Return the newly added reply (last item)
+    const savedReply = post.replies[post.replies.length - 1];
+    res.status(201).json(savedReply);
+  } catch (err) {
+    console.error('addReply error:', err.message);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+module.exports = { getPosts, createPost, toggleLike, addReply };

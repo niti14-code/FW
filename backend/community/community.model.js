@@ -28,6 +28,12 @@ const communityPostSchema = new mongoose.Schema({
   likedBy: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  }],
+  replies: [{
+    author:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    authorName:{ type: String },
+    content:   { type: String, required: true, maxlength: 300 },
+    createdAt: { type: Date, default: Date.now }
   }]
 }, { timestamps: true });
 
