@@ -103,16 +103,84 @@
   font-size: 12px;
   margin-bottom: 8px;
 }
+/* REPLACE these classes in your KYCPage.css */
 
-.kyc-doc-img {
+/* Fix broken image icons and aspect ratio */
+.kyc-doc-img,
+.kyc-review-img,
+.kyc-preview-img {
   width: 100%;
-  height: 120px;
-  object-fit: cover;
+  aspect-ratio: 4/3;
+  object-fit: contain;
   border-radius: 8px;
-  border: 1px solid #333;
+  background: #1a1a1a;
+  display: block;
+  /* Hide broken image icon */
+  text-indent: -9999px;
 }
 
+/* Alternative: show placeholder on error */
+.kyc-doc-img::before,
+.kyc-review-img::before,
+.kyc-preview-img::before {
+  content: "📄 Document";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: #2a2a2a;
+  color: #888;
+  font-size: 12px;
+  text-indent: 0;
+  border-radius: 8px;
+}
+
+/* Ensure images don't overflow */
+.kyc-doc-item {
+  max-width: 100%;
+  overflow: hidden;
+}
+
+/* Better grid for documents */
+.kyc-docs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  align-items: start;
+}
+
+/* Fix for the submitted view to prevent showing upload form */
+.kyc-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  min-height: 400px;
+}
+
+/* Selfie should fill the circle */
+.kyc-selfie-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.kyc-review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+/* Missing document styling */
 .kyc-upload-box.missing {
   opacity: 0.5;
-  border: 1px dashed #dc3545;
+  border: 2px dashed #dc3545;
+  border-radius: 14px;
 }

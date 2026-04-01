@@ -23,3 +23,4 @@ backend/alerts_backup
 frontend/src/pages/AdminDashboard 2.css
 frontend/src/pages/AdminDashboard 2.jsx
 frontend/src/pages/AdminSettings 2.jsx
+frontend/src/services/api_gowtham.js

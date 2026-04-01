@@ -31,10 +31,19 @@ const register = async (req, res) => {
       return res.status(400).json({ message: 'User already exists' });
     }
 
-    // Determine KYC status automatically
-    const kycStatus = ['provider', 'both'].includes(role) ? 'pending' : 'not_required';
+    // Check if KYC documents were actually provided
+    const hasKycDocs = !!(aadhar || collegeIdCard || drivingLicense);
+    
+    // Determine KYC status - if docs provided during registration, mark as pending
+    let kycStatus = 'not_required';
+    if (['provider', 'both'].includes(role)) {
+      kycStatus = hasKycDocs ? 'pending' : 'not_required';
+    } else if (hasKycDocs) {
+      // Even seekers can submit KYC during registration if they want
+      kycStatus = 'pending';
+    }
 
-    const salt           = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
     const user = new User({
@@ -46,15 +55,18 @@ const register = async (req, res) => {
       college: role === 'admin' ? undefined : college,
       kycStatus,
       kycDocuments: {
-        aadhar:         aadhar         || '',
-        drivingLicense: drivingLicense || '',
-        collegeIdCard:  collegeIdCard  || ''
+        aadhar: aadhar || null,
+        drivingLicense: drivingLicense || null,
+        collegeIdCard: collegeIdCard || null,
+        selfie: null // Selfie not collected during registration
       },
+      // CRITICAL: Set submission timestamp if documents provided
+      kycSubmittedAt: hasKycDocs ? new Date() : undefined,
       emergencyContact: emergencyContact || ''
     });
 
     await user.save();
-    console.log('✅ New user created:', user._id, '| kycStatus:', kycStatus);
+    console.log('✅ New user created:', user._id, '| kycStatus:', user.kycStatus, '| hasDocs:', hasKycDocs);
 
     const token = jwt.sign(
       { userId: user._id },
@@ -65,12 +77,12 @@ const register = async (req, res) => {
     res.status(201).json({
       token,
       user: {
-        id:       user._id,
-        name:     user.name,
-        email:    user.email,
-        role:     user.role,
-        college:  user.college,
-        phone:    user.phone,
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        college: user.college,
+        phone: user.phone,
         kycStatus: user.kycStatus
       }
     });

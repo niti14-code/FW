@@ -715,23 +715,34 @@ function RidesTab({ notify }) {
 
 /* ─── KYC ────────────────────────────────────────────────────────── */
 function KYCTab({ notify, onStatRefresh }) {
-  const [users,   setUsers]   = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter,  setFilter]  = useState('pending'); // default to pending
-  const [acting,  setActing]  = useState({});
+  const [filter, setFilter] = useState('pending');
+  const [acting, setActing] = useState({});
 
-  // Fetch ALL users who have submitted KYC (any status except not_required)
   useEffect(() => {
     setLoading(true);
-    // FIXED: Don't filter by role - both providers and seekers can have KYC
-    // Also request kyc=pending to get pending ones first, then filter on frontend
     apiFetch('/admin/users')
       .then(data => {
         const arr = Array.isArray(data) ? data : [];
-        // Keep only users who have gone through KYC (exclude not_required)
-        // This includes: pending, approved, rejected
-        const kycUsers = arr.filter(u => u.kycStatus && u.kycStatus !== 'not_required');
-        console.log('KYC users found:', kycUsers.length, kycUsers.map(u => ({ name: u.name, status: u.kycStatus })));
+        
+        // FIXED: Show users with KYC status OR actual documents
+        const kycUsers = arr.filter(u => {
+          const hasKycStatus = ['pending', 'approved', 'rejected'].includes(u.kycStatus);
+          const hasDocuments = u.kycDocuments && (
+            (u.kycDocuments.aadhar && u.kycDocuments.aadhar.length > 0) ||
+            (u.kycDocuments.collegeIdCard && u.kycDocuments.collegeIdCard.length > 0) ||
+            (u.kycDocuments.drivingLicense && u.kycDocuments.drivingLicense.length > 0)
+          );
+          return hasKycStatus || hasDocuments;
+        });
+        
+        console.log('KYC users found:', kycUsers.length, kycUsers.map(u => ({ 
+          name: u.name, 
+          status: u.kycStatus,
+          hasDocs: !!(u.kycDocuments?.aadhar || u.kycDocuments?.collegeIdCard)
+        })));
+        
         setUsers(kycUsers);
       })
       .catch(e => {
@@ -748,36 +759,35 @@ function KYCTab({ notify, onStatRefresh }) {
         method: 'PUT', 
         body: JSON.stringify({ status }) 
       });
-      // Update in-place so the user stays visible (just their status changes)
       setUsers(p => p.map(u => u._id === id ? { ...u, kycStatus: status } : u));
       onStatRefresh?.();
       notify(`KYC ${status} for ${data.user?.name || 'user'}`);
     } catch (e) { 
       notify(e.message, 'err'); 
-    }
-    finally { 
+    } finally { 
       setActing(a => ({ ...a, [id]: null })); 
     }
   }
 
   const counts = {
-    all:      users.length,
-    pending:  users.filter(u => u.kycStatus === 'pending').length,
+    all: users.length,
+    pending: users.filter(u => u.kycStatus === 'pending' || !u.kycStatus).length,
     approved: users.filter(u => u.kycStatus === 'approved').length,
     rejected: users.filter(u => u.kycStatus === 'rejected').length,
   };
 
-  const filtered = filter === 'all' ? users : users.filter(u => u.kycStatus === filter);
+  const filtered = filter === 'all' 
+    ? users 
+    : users.filter(u => (u.kycStatus || 'pending') === filter);
 
   if (loading) return <div className="ad-loading">Loading KYC requests…</div>;
 
   return (
     <div>
-      {/* Filter chips */}
       <div className="ad-filter-row">
         {[
-          ['all',      `All (${counts.all})`],
-          ['pending',  `Pending (${counts.pending})`],
+          ['all', `All (${counts.all})`],
+          ['pending', `Pending (${counts.pending})`],
           ['approved', `Approved (${counts.approved})`],
           ['rejected', `Rejected (${counts.rejected})`],
         ].map(([v, l]) => (
@@ -803,7 +813,7 @@ function KYCTab({ notify, onStatRefresh }) {
                 <th>College</th>
                 <th>Documents</th>
                 <th>Submitted</th>
-                <th>KYC Status</th>
+                <th>Status</th>
                 <th>Actions</th>
               </tr>
             </thead>
@@ -821,59 +831,47 @@ function KYCTab({ notify, onStatRefresh }) {
                   </td>
                   <td><span className={`ad-badge ad-badge-${u.role}`}>{u.role}</span></td>
                   <td style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)' }}>{u.college || '—'}</td>
+                  
+                  {/* TEXT-ONLY document list - no images/links */}
                   <td>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                      {u.kycDocuments?.aadhar && (
-                        <a className="ad-doc-link" href={u.kycDocuments.aadhar} target="_blank" rel="noreferrer">🪪 Aadhar</a>
-                      )}
-                      {u.kycDocuments?.drivingLicense && (
-                        <a className="ad-doc-link" href={u.kycDocuments.drivingLicense} target="_blank" rel="noreferrer">🚗 Licence</a>
-                      )}
-                      {u.kycDocuments?.collegeIdCard && (
-                        <a className="ad-doc-link" href={u.kycDocuments.collegeIdCard} target="_blank" rel="noreferrer">🎓 College ID</a>
-                      )}
-                      {u.kycDocuments?.selfie && (
-                        <a className="ad-doc-link" href={u.kycDocuments.selfie} target="_blank" rel="noreferrer">🤳 Selfie</a>
-                      )}
-                      {!u.kycDocuments?.aadhar && !u.kycDocuments?.drivingLicense && !u.kycDocuments?.collegeIdCard && (
-                        <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)' }}>No docs uploaded</span>
-                      )}
+                    <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)' }}>
+                      {[
+                        u.kycDocuments?.aadhar && '🪪 Aadhar',
+                        u.kycDocuments?.collegeIdCard && '🎓 College ID',
+                        u.kycDocuments?.drivingLicense && '🚗 License',
+                        u.kycDocuments?.selfie && '🤳 Selfie'
+                      ].filter(Boolean).join(' · ') || '—'}
                     </div>
                   </td>
+                  
                   <td style={{ fontSize: 12, color: 'rgba(255,255,255,0.32)' }}>
                     {u.kycSubmittedAt 
-                      ? new Date(u.kycSubmittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                      : new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                      ? new Date(u.kycSubmittedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                      : new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
                     }
                   </td>
                   <td>
-                    <span className={`ad-badge ad-badge-${u.kycStatus}`}>{u.kycStatus}</span>
+                    <span className={`ad-badge ad-badge-${u.kycStatus || 'pending'}`}>
+                      {u.kycStatus || 'pending'}
+                    </span>
                   </td>
                   <td>
                     <div className="ad-actions">
-                      {u.kycStatus === 'pending' && (
+                      {(u.kycStatus === 'pending' || !u.kycStatus) && (
                         <>
                           <button className="ad-btn-approve" disabled={!!acting[u._id]}
-                            onClick={() => review(u._id, 'approved')}>
-                            {acting[u._id] === 'approved' ? '…' : '✓ Approve'}
-                          </button>
+                            onClick={() => review(u._id, 'approved')}>✓ Approve</button>
                           <button className="ad-btn-reject" disabled={!!acting[u._id]}
-                            onClick={() => review(u._id, 'rejected')}>
-                            {acting[u._id] === 'rejected' ? '…' : '✕ Reject'}
-                          </button>
+                            onClick={() => review(u._id, 'rejected')}>✕ Reject</button>
                         </>
                       )}
                       {u.kycStatus === 'approved' && (
                         <button className="ad-btn-reject" disabled={!!acting[u._id]}
-                          onClick={() => review(u._id, 'rejected')}>
-                          {acting[u._id] === 'rejected' ? '…' : '✕ Reject'}
-                        </button>
+                          onClick={() => review(u._id, 'rejected')}>✕ Reject</button>
                       )}
                       {u.kycStatus === 'rejected' && (
                         <button className="ad-btn-approve" disabled={!!acting[u._id]}
-                          onClick={() => review(u._id, 'approved')}>
-                          {acting[u._id] === 'approved' ? '…' : '✓ Approve'}
-                        </button>
+                          onClick={() => review(u._id, 'approved')}>✓ Approve</button>
                       )}
                     </div>
                   </td>
@@ -886,7 +884,6 @@ function KYCTab({ notify, onStatRefresh }) {
     </div>
   );
 }
-
 /* ─── Incidents ──────────────────────────────────────────────────── */
 function IncidentsTab({ notify }) {
   const [incidents,setIncidents]=useState([]);

@@ -18,45 +18,67 @@ export default function KYCPage({ navigate }) {
 
   const isProvider = user?.role === 'provider' || user?.role === 'both';
 
+  const getDocUrl = (docType, filename) => {
+  if (!filename) return null;
+  // If it's already a full URL or base64, use as-is
+  if (filename.startsWith('http') || filename.startsWith('data:')) {
+    return filename;
+  }
+  // Otherwise, construct API URL
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  // Use user.id or user._id depending on your auth context
+  const userId = user?.id || user?._id;
+  return `${API_BASE_URL}/api/kyc/document/${userId}/${docType}`;
+};
+
   // Fetch existing KYC status on load
   useEffect(() => {
     fetchKycStatus();
   }, []);
 
   const fetchKycStatus = async () => {
-    setFetchingStatus(true);
-    try {
-      const status = await api.getKycStatus();
-      setKycStatus(status);
+  setFetchingStatus(true);
+  try {
+    const status = await api.getKycStatus();
+    console.log('Full KYC Status:', JSON.stringify(status, null, 2));
+    console.log('User from auth:', user);
 
-      // Only show the submitted view if docs have actually been submitted
-      if (
-        status.kycStatus === 'pending' ||
-        status.kycStatus === 'approved' ||
-        status.kycStatus === 'rejected'
-      ) {
-        setSubmitted(true);
-        // Pre-fill previews if documents exist
-        if (status.documents) {
-          setPreview({
-            aadhar:   status.documents.aadhar        || null,
-            collegeId:status.documents.collegeIdCard  || null,
-            license:  status.documents.drivingLicense || null,
-            selfie:   status.documents.selfie         || null,
-          });
-        }
-      } else {
-        // 'not_submitted' or anything else → show the upload form
-        setSubmitted(false);
-      }
-    } catch (err) {
-      console.error('Failed to fetch KYC status:', err);
-      // On error, fall back to showing the upload form
-      setSubmitted(false);
-    } finally {
+    // IMPROVED: Check for ANY document content (base64, URL, or filename)
+    const hasDocuments = status?.documents && (
+      (status.documents.aadhar && status.documents.aadhar.length > 0 && status.documents.aadhar !== 'null' && status.documents.aadhar !== '') ||
+      (status.documents.collegeIdCard && status.documents.collegeIdCard.length > 0 && status.documents.collegeIdCard !== 'null' && status.documents.collegeIdCard !== '')
+    );
+
+    // Check if it's a real submission (pending, approved, or rejected WITH documents)
+    const isActuallySubmitted = ['pending', 'approved', 'rejected'].includes(status.kycStatus) && hasDocuments;
+
+    if (isActuallySubmitted) {
+      setKycStatus(status);
+      setSubmitted(true);
+      setPreview({
+        aadhar: status.documents.aadhar || null,
+        collegeId: status.documents.collegeIdCard || null,
+        license: status.documents.drivingLicense || null,
+        selfie: status.documents.selfie || null,
+      });
       setFetchingStatus(false);
+      return; // EARLY RETURN - critical!
     }
-  };
+
+    // Show upload form for not_submitted or no documents
+    setSubmitted(false);
+    setKycStatus({
+      ...status,
+      kycStatus: 'not_submitted'
+    });
+
+  } catch (err) {
+    console.error('Failed to fetch KYC status:', err);
+    setSubmitted(false);
+  } finally {
+    setFetchingStatus(false);
+  }
+};
 
   const handleFile = (key) => async (e) => {
     const file = e.target.files[0];
@@ -90,36 +112,63 @@ export default function KYCPage({ navigate }) {
   };
 
   const handleSubmit = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const uploads = await uploadFiles();
-      const payload = {
-        aadharUrl:      uploads.aadhar,
-        collegeIdCardUrl: uploads.collegeId,
-        selfieUrl:      uploads.selfie,
-      };
-      if (isProvider) payload.drivingLicenseUrl = uploads.license;
-
-      await api.submitKyc(payload);
-
-      setKycStatus({
-        kycStatus: 'pending',
-        documents: {
-          aadhar:        uploads.aadhar,
-          collegeIdCard: uploads.collegeId,
-          drivingLicense:uploads.license,
-          selfie:        uploads.selfie,
-        },
-      });
-      setSubmitted(true);
-    } catch (err) {
-      setError(err.message || 'Failed to submit KYC');
-    } finally {
-      setLoading(false);
+  setLoading(true);
+  setError('');
+  
+  try {
+    const uploads = await uploadFiles();
+    
+    // Validate uploads exist
+    if (!uploads.aadhar || !uploads.collegeId) {
+      throw new Error('Please upload all required documents');
     }
-  };
 
+    // Check base64 size (limit to ~2MB per image to prevent 400 error)
+    const checkSize = (base64String) => {
+      if (!base64String) return true;
+      // Rough estimate: base64 is ~4/3 of binary size
+      const sizeInBytes = (base64String.length * 3) / 4;
+      return sizeInBytes < 2 * 1024 * 1024; // 2MB limit
+    };
+
+    if (!checkSize(uploads.aadhar) || !checkSize(uploads.collegeId) || !checkSize(uploads.license) || !checkSize(uploads.selfie)) {
+      throw new Error('One or more images exceed 2MB. Please compress and re-upload.');
+    }
+
+    const payload = {
+      aadharUrl: uploads.aadhar,
+      collegeIdCardUrl: uploads.collegeId,
+      selfieUrl: uploads.selfie || null,
+    };
+    
+    if (isProvider) {
+      payload.drivingLicenseUrl = uploads.license;
+    }
+
+    console.log('Submitting KYC payload:', payload); // DEBUG
+
+    const result = await api.submitKyc(payload);
+    console.log('KYC Submit Success:', result);
+
+    // Update state to show success view
+    setKycStatus({
+      kycStatus: 'pending',
+      documents: {
+        aadhar: uploads.aadhar,
+        collegeIdCard: uploads.collegeId,
+        drivingLicense: uploads.license,
+        selfie: uploads.selfie,
+      },
+    });
+    setSubmitted(true);
+    
+  } catch (err) {
+    console.error('KYC Submit Error:', err);
+    setError(err.message || 'Failed to submit KYC. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
   // Status badge component
   const StatusBadge = ({ status }) => {
     const colors = {
@@ -171,39 +220,101 @@ export default function KYCPage({ navigate }) {
           <StatusBadge status={kycStatus.kycStatus} />
 
           {/* Submitted documents */}
-          {kycStatus.documents && (
-            <div className="kyc-submitted-docs mt-24">
-              <h4 style={{ marginBottom: 16, color: 'var(--text2)', fontSize: 14, fontWeight: 600 }}>
-                Submitted Documents
-              </h4>
-              <div className="kyc-docs-grid">
-                {kycStatus.documents.aadhar && (
-                  <div className="kyc-doc-item">
-                    <div className="kyc-doc-label">🪪 Aadhar Card</div>
-                    <img src={kycStatus.documents.aadhar} alt="Aadhar" className="kyc-doc-img" />
-                  </div>
-                )}
-                {kycStatus.documents.collegeIdCard && (
-                  <div className="kyc-doc-item">
-                    <div className="kyc-doc-label">🎓 College ID</div>
-                    <img src={kycStatus.documents.collegeIdCard} alt="College ID" className="kyc-doc-img" />
-                  </div>
-                )}
-                {isProvider && kycStatus.documents.drivingLicense && (
-                  <div className="kyc-doc-item">
-                    <div className="kyc-doc-label">🚗 Driving License</div>
-                    <img src={kycStatus.documents.drivingLicense} alt="License" className="kyc-doc-img" />
-                  </div>
-                )}
-                {kycStatus.documents.selfie && (
-                  <div className="kyc-doc-item">
-                    <div className="kyc-doc-label">🤳 Selfie</div>
-                    <img src={kycStatus.documents.selfie} alt="Selfie" className="kyc-doc-img" />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          // In the submitted view section, update the image rendering:
+
+{kycStatus.documents && (
+  <div className="kyc-submitted-docs mt-24">
+    <h4 style={{ marginBottom: 16, color: 'var(--text2)', fontSize: 14, fontWeight: 600 }}>
+      Submitted Documents
+    </h4>
+    <div className="kyc-docs-grid">
+      {kycStatus.documents.aadhar && (
+  <div className="kyc-doc-item">
+    <div className="kyc-doc-label">🪪 Aadhar Card</div>
+    <img 
+      src={getDocUrl('aadhar', kycStatus.documents.aadhar)} 
+      alt="Aadhar" 
+      className="kyc-doc-img"
+      onError={(e) => {
+        // If image fails to load, show filename as fallback
+        e.target.style.display = 'none';
+        e.target.nextSibling.style.display = 'flex';
+      }}
+    />
+    <div style={{display: 'none', padding: 20, background: '#2a2a2a', borderRadius: 8, textAlign: 'center'}}>
+      <div style={{fontSize: 32, marginBottom: 8}}>📄</div>
+      <div style={{color: '#888', fontSize: 12, wordBreak: 'break-all'}}>
+        {kycStatus.documents.aadhar}
+      </div>
+    </div>
+  </div>
+)}
+      
+      {kycStatus.documents.collegeIdCard && (
+  <div className="kyc-doc-item">
+    <div className="kyc-doc-label">🎓 College ID</div>
+    <img 
+      src={getDocUrl('collegeIdCard', kycStatus.documents.collegeIdCard)} 
+      alt="College ID" 
+      className="kyc-doc-img"
+      onError={(e) => {
+        e.target.style.display = 'none';
+        e.target.nextSibling.style.display = 'flex';
+      }}
+    />
+    <div style={{display: 'none', padding: 20, background: '#2a2a2a', borderRadius: 8, textAlign: 'center'}}>
+      <div style={{fontSize: 32, marginBottom: 8}}>📄</div>
+      <div style={{color: '#888', fontSize: 12, wordBreak: 'break-all'}}>
+        {kycStatus.documents.collegeIdCard}
+      </div>
+    </div>
+  </div>
+)}
+
+{isProvider && kycStatus.documents.drivingLicense && (
+  <div className="kyc-doc-item">
+    <div className="kyc-doc-label">🚗 Driving License</div>
+    <img 
+      src={getDocUrl('drivingLicense', kycStatus.documents.drivingLicense)} 
+      alt="License" 
+      className="kyc-doc-img"
+      onError={(e) => {
+        e.target.style.display = 'none';
+        e.target.nextSibling.style.display = 'flex';
+      }}
+    />
+    <div style={{display: 'none', padding: 20, background: '#2a2a2a', borderRadius: 8, textAlign: 'center'}}>
+      <div style={{fontSize: 32, marginBottom: 8}}>📄</div>
+      <div style={{color: '#888', fontSize: 12, wordBreak: 'break-all'}}>
+        {kycStatus.documents.drivingLicense}
+      </div>
+    </div>
+  </div>
+)}
+
+{kycStatus.documents.selfie && (
+  <div className="kyc-doc-item">
+    <div className="kyc-doc-label">🤳 Selfie</div>
+    <img 
+      src={getDocUrl('selfie', kycStatus.documents.selfie)} 
+      alt="Selfie" 
+      className="kyc-doc-img"
+      onError={(e) => {
+        e.target.style.display = 'none';
+        e.target.nextSibling.style.display = 'flex';
+      }}
+    />
+    <div style={{display: 'none', padding: 20, background: '#2a2a2a', borderRadius: 8, textAlign: 'center'}}>
+      <div style={{fontSize: 32, marginBottom: 8}}>📄</div>
+      <div style={{color: '#888', fontSize: 12, wordBreak: 'break-all'}}>
+        {kycStatus.documents.selfie}
+      </div>
+    </div>
+  </div>
+)}
+    </div>
+  </div>
+)}
 
           {kycStatus.kycStatus === 'rejected' && (
             <button

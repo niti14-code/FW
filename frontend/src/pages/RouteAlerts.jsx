@@ -1,239 +1,655 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as api from '../services/api.js';
+import LocationSearch from '../components/LocationSearch.jsx';
 
-const searchPlaces = async (query) => {
-  if (!query || query.length < 3) return [];
-  try {
-    const res = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&countrycodes=in`,
-      { headers: { 'Accept-Language': 'en' } }
-    );
-    const data = await res.json();
-    return data.map(p => ({ label: p.display_name.split(',').slice(0, 3).join(', '), lat: parseFloat(p.lat), lng: parseFloat(p.lon) }));
-  } catch { return []; }
-};
+/* ─── inline styles ──────────────────────────────────────────────── */
+const css = `
+  @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap');
 
-function PlaceInput({ placeholder, value, onSelect }) {
-  const [query, setQuery]     = useState(value || '');
-  const [results, setResults] = useState([]);
-  const [open, setOpen]       = useState(false);
-  const debounce = useRef(null);
-  const wrapRef  = useRef(null);
+  .ra-wrap {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 44px 24px 100px;
+    font-family: 'Sora', sans-serif;
+    color: rgba(255,255,255,0.88);
+  }
 
-  useEffect(() => { setQuery(value || ''); }, [value]);
-  useEffect(() => {
-    const close = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, []);
+  /* header */
+  .ra-eyebrow {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.2em;
+    text-transform: uppercase; color: #f59e0b; margin-bottom: 8px;
+  }
+  .ra-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: 34px; font-weight: 400; margin: 0 0 8px;
+    color: rgba(255,255,255,0.92);
+  }
+  .ra-sub { font-size: 13px; color: rgba(255,255,255,0.38); margin-bottom: 32px; }
 
-  const onChange = (e) => {
-    const q = e.target.value; setQuery(q);
-    clearTimeout(debounce.current);
-    if (q.length < 3) { setResults([]); setOpen(false); return; }
-    debounce.current = setTimeout(async () => {
-      const r = await searchPlaces(q); setResults(r); setOpen(r.length > 0);
-    }, 400);
-  };
+  /* tabs */
+  .ra-tabs {
+    display: flex; gap: 6px; margin-bottom: 28px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 12px; padding: 5px;
+  }
+  .ra-tab {
+    flex: 1; padding: 10px 0; border: none; border-radius: 9px;
+    font-family: 'Sora', sans-serif; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    background: transparent; color: rgba(255,255,255,0.35);
+  }
+  .ra-tab.active {
+    background: #f59e0b; color: #1a0f00;
+    box-shadow: 0 2px 12px rgba(245,158,11,0.35);
+  }
 
-  return (
-    <div ref={wrapRef} style={{ position: 'relative' }}>
-      <div className="input-wrap">
-        <span className="input-icon">📍</span>
-        <input className="input" placeholder={placeholder} value={query} onChange={onChange}
-          onFocus={() => results.length > 0 && setOpen(true)} autoComplete="off" />
-      </div>
-      {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 999, background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px #0008' }}>
-          {results.map((r, i) => (
-            <div key={i} onClick={() => { setQuery(r.label); setOpen(false); onSelect(r); }}
-              style={{ padding: '10px 14px', cursor: 'pointer', fontSize: 13, color: '#ddd', borderBottom: '1px solid #2a2a3e' }}
-              onMouseEnter={e => e.currentTarget.style.background = '#2a2a4e'}
-              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              📍 {r.label}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  /* alert / success banners */
+  .ra-banner {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 14px 16px; border-radius: 12px;
+    font-size: 13px; font-weight: 500; margin-bottom: 18px;
+    animation: ra-fade 0.2s ease;
+  }
+  @keyframes ra-fade { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+  .ra-banner-err  { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.25);  color: #fca5a5; }
+  .ra-banner-ok   { background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2);   color: #86efac; }
+  .ra-banner-urgent { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.4); color: #fca5a5; }
+
+  /* card */
+  .ra-card {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 18px; padding: 24px;
+    margin-bottom: 20px;
+  }
+  .ra-card-title {
+    font-size: 15px; font-weight: 700; margin-bottom: 20px;
+    color: rgba(255,255,255,0.9);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ra-card-title-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: rgba(245,158,11,0.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+  }
+
+  /* fields */
+  .ra-field { margin-bottom: 16px; }
+  .ra-label {
+    display: block; font-size: 11px; font-weight: 700;
+    letter-spacing: 0.08em; text-transform: uppercase;
+    color: rgba(255,255,255,0.38); margin-bottom: 7px;
+  }
+  .ra-input {
+    width: 100%; box-sizing: border-box;
+    padding: 11px 14px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    font-family: 'Sora', sans-serif; font-size: 13px;
+    color: rgba(255,255,255,0.88);
+    outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .ra-input:focus {
+    border-color: rgba(245,158,11,0.5);
+    box-shadow: 0 0 0 3px rgba(245,158,11,0.1);
+  }
+  .ra-input::placeholder { color: rgba(255,255,255,0.2); }
+  .ra-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* radius row */
+  .ra-radius-row {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 10px; padding: 10px 14px;
+  }
+  .ra-radius-label { font-size: 12px; color: rgba(255,255,255,0.4); flex: 1; }
+  .ra-radius-val {
+    font-size: 13px; font-weight: 700; color: #f59e0b; min-width: 52px; text-align: right;
+  }
+  .ra-slider {
+    width: 100px; accent-color: #f59e0b; cursor: pointer;
+  }
+
+  /* submit btn */
+  .ra-btn {
+    width: 100%; padding: 13px;
+    background: #f59e0b; color: #1a0f00;
+    border: none; border-radius: 12px;
+    font-family: 'Sora', sans-serif; font-size: 14px; font-weight: 700;
+    cursor: pointer; transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+    margin-top: 6px;
+    box-shadow: 0 4px 16px rgba(245,158,11,0.25);
+  }
+  .ra-btn:hover:not(:disabled) {
+    background: #d97706;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(245,158,11,0.35);
+  }
+  .ra-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* active alerts list */
+  .ra-alert-item {
+    display: flex; align-items: center; gap: 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    border-radius: 14px; padding: 16px 18px;
+    margin-bottom: 10px;
+    transition: border-color 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .ra-alert-item::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, #f59e0b, rgba(245,158,11,0.2));
+  }
+  .ra-alert-item.urgent::before {
+    background: linear-gradient(180deg, #ef4444, rgba(239,68,68,0.2));
+  }
+  .ra-alert-icon {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: rgba(245,158,11,0.12);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .ra-alert-icon.urgent {
+    background: rgba(239,68,68,0.15);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+  }
+  .ra-alert-body { flex: 1; min-width: 0; }
+  .ra-alert-name { font-size: 14px; font-weight: 700; margin-bottom: 3px; }
+  .ra-alert-meta { font-size: 11px; color: rgba(255,255,255,0.3); }
+  .ra-alert-urgent-badge {
+    display: inline-block;
+    background: rgba(239,68,68,0.2);
+    color: #fca5a5;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    margin-left: 8px;
+    text-transform: uppercase;
+  }
+  .ra-alert-del {
+    padding: 6px 14px; border-radius: 8px;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.2);
+    color: #fca5a5; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: background 0.15s; flex-shrink: 0;
+  }
+  .ra-alert-del:hover { background: rgba(239,68,68,0.2); }
+
+  /* empty */
+  .ra-empty {
+    text-align: center; padding: 48px 20px;
+    color: rgba(255,255,255,0.25); font-size: 13px;
+  }
+  .ra-empty-icon { font-size: 36px; margin-bottom: 10px; opacity: 0.4; }
+
+  /* section heading */
+  .ra-section-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: rgba(255,255,255,0.25);
+    margin: 24px 0 12px;
+  }
+
+  /* notification badge */
+  .ra-notif-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    background: #ef4444;
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+  }
+`;
+
+const API_BASE = import.meta.env?.VITE_API_URL || 'http://localhost:5000';
+
+function getToken() {
+  return localStorage.getItem('cr_token') || '';
 }
 
-export default function RouteAlerts({ navigate }) {
-  const [tab,     setTab]     = useState('my');
-  const [alerts,  setAlerts]  = useState([]);
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${getToken()}`,
+      ...(opts.headers || {}),
+    },
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || data.error || `Error ${res.status}`);
+  return data;
+}
+
+/* ─── Main Component ─────────────────────────────────────────────── */
+export default function RouteAlerts({ navigate, socket }) {
+  const [tab, setTab] = useState('alerts');
+  const [alerts, setAlerts] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [busy,    setBusy]    = useState(false);
+  const [urgentNotification, setUrgentNotification] = useState(null);
 
-  // Subscribe form
-  const [subPickup, setSubPickup] = useState({ label: '', lat: '', lng: '' });
-  const [subDrop,   setSubDrop]   = useState({ label: '', lat: '', lng: '' });
-  const [subName,   setSubName]   = useState('');
+  const [form, setForm] = useState({
+    name: '', pickup: null, drop: null,
+    pickupRadius: 3000, dropRadius: 3000,
+  });
 
-  // Request form
-  const [reqPickup, setReqPickup] = useState({ label: '', lat: '', lng: '' });
-  const [reqDrop,   setReqDrop]   = useState({ label: '', lat: '', lng: '' });
-  const [reqDate,   setReqDate]   = useState('');
+  const [reqForm, setReqForm] = useState({
+    pickup: null, drop: null, date: '', timeStart: '',
+  });
 
+  /* fetch alerts and notifications */
   useEffect(() => {
-    api.getMyAlerts()
+    fetchAlerts();
+    fetchNotifications();
+    
+    // Socket listeners for real-time notifications
+    if (socket) {
+      socket.on('urgent-availability', handleUrgentAvailability);
+      socket.on('notification', handleNewNotification);
+      socket.on('new-booking', handleProviderBooking);
+      
+      // Authenticate socket
+      const token = getToken();
+      if (token) {
+        socket.emit('authenticate', { 
+          userId: getUserIdFromToken(token),
+          userType: 'seeker'
+        });
+      }
+    }
+    
+    return () => {
+      if (socket) {
+        socket.off('urgent-availability');
+        socket.off('notification');
+        socket.off('new-booking');
+      }
+    };
+  }, [socket]);
+
+  function getUserIdFromToken(token) {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.userId || payload.id;
+    } catch {
+      return null;
+    }
+  }
+  function getUserTypeFromToken(token) {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.role || payload.userType;
+  } catch {
+    return null;
+  }
+}
+
+  function fetchAlerts() {
+    apiFetch('/alerts/my')
       .then(d => setAlerts(Array.isArray(d) ? d : []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }
 
-  const handleSubscribe = async (e) => {
-    e.preventDefault(); setError(''); setSuccess('');
-    if (!subPickup.lat || !subDrop.lat) { setError('Please select both pickup and drop locations'); return; }
-    setBusy(true);
+  function fetchNotifications() {
+    apiFetch('/notifications?limit=10')
+      .then(d => {
+        setNotifications(d.notifications || []);
+        setUnreadCount(d.unreadCount || 0);
+      })
+      .catch(() => {});
+  }
+
+  function handleUrgentAvailability(data) {
+    setUrgentNotification(data);
+    fetchNotifications();
+    // Auto-dismiss after 10 seconds
+    setTimeout(() => setUrgentNotification(null), 10000);
+  }
+
+  function handleNewNotification(data) {
+    fetchNotifications();
+  }
+
+  function handleProviderBooking(data) {
+    // Provider view - show booking notification
+    setSuccess(`🎉 New booking! ${data.booking.seeker.name} booked ${data.booking.seats} seat(s)`);
+    setTimeout(() => setSuccess(''), 5000);
+    fetchNotifications();
+  }
+
+  function notify(type, msg) {
+    if (type === 'err') setError(msg);
+    else setSuccess(msg);
+    setTimeout(() => { setError(''); setSuccess(''); }, 5000);
+  }
+
+  /* create alert */
+  async function handleSubscribe(e) {
+    e.preventDefault();
+    if (!form.pickup || !form.drop) return notify('err', 'Select both pickup and drop locations');
+    setSubmitting(true);
     try {
-      const res = await api.createAlert({
-        name:   subName || `${subPickup.label.split(',')[0]} → ${subDrop.label.split(',')[0]}`,
-        pickup: { coordinates: [parseFloat(subPickup.lng), parseFloat(subPickup.lat)] },
-        drop:   { coordinates: [parseFloat(subDrop.lng),   parseFloat(subDrop.lat)] },
-        pickupRadius: 5000, dropRadius: 5000,
+      const res = await apiFetch('/alerts', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: form.name || 'Route Alert',
+          pickup: { coordinates: [form.pickup.lng, form.pickup.lat] },
+          drop: { coordinates: [form.drop.lng, form.drop.lat] },
+          pickupRadius: Number(form.pickupRadius),
+          dropRadius: Number(form.dropRadius),
+        }),
       });
       setAlerts(a => [res.alert, ...a]);
-      setSuccess('Alert created! You will be notified when rides match your route.');
-      setSubPickup({ label: '', lat: '', lng: '' });
-      setSubDrop({ label: '', lat: '', lng: '' });
-      setSubName('');
-    } catch (err) { setError(err.message); }
-    finally { setBusy(false); }
-  };
+      setForm({ name: '', pickup: null, drop: null, pickupRadius: 3000, dropRadius: 3000 });
+      notify('ok', `Alert created! ${res.immediateMatches > 0 ? `${res.immediateMatches} matching rides found right now.` : "You'll be notified when rides match."}`);
+    } catch (err) {
+      notify('err', err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
-  const handleRequest = async (e) => {
-    e.preventDefault(); setError(''); setSuccess('');
-    if (!reqPickup.lat || !reqDrop.lat) { setError('Please select both pickup and drop locations'); return; }
-    setBusy(true);
+  /* delete alert */
+  async function handleDelete(id) {
     try {
-      await api.createAlert({
-        name:   `Ride Request: ${reqPickup.label.split(',')[0]} → ${reqDrop.label.split(',')[0]}`,
-        pickup: { coordinates: [parseFloat(reqPickup.lng), parseFloat(reqPickup.lat)] },
-        drop:   { coordinates: [parseFloat(reqDrop.lng),   parseFloat(reqDrop.lat)] },
-        date: reqDate || undefined,
-        pickupRadius: 5000, dropRadius: 5000,
-      });
-      setSuccess('Ride request posted! Providers near your route will be notified.');
-      setReqPickup({ label: '', lat: '', lng: '' });
-      setReqDrop({ label: '', lat: '', lng: '' });
-      setReqDate('');
-    } catch (err) { setError(err.message); }
-    finally { setBusy(false); }
-  };
+      await apiFetch(`/alerts/${id}`, { method: 'DELETE' });
+      setAlerts(a => a.filter(x => x._id !== id));
+    } catch (err) {
+      notify('err', err.message);
+    }
+  }
 
-  const deleteAlert = async (id) => {
-    try { await api.deleteAlert(id); setAlerts(a => a.filter(x => x._id !== id)); }
-    catch (err) { setError(err.message); }
-  };
+  /* post ride request */
+  async function handlePostRequest(e) {
+    e.preventDefault();
+    if (!reqForm.pickup || !reqForm.drop) return notify('err', 'Select both pickup and drop locations');
+    setSubmitting(true);
+    try {
+      await apiFetch('/alerts', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Ride Request',
+          pickup: { coordinates: [reqForm.pickup.lng, reqForm.pickup.lat] },
+          drop: { coordinates: [reqForm.drop.lng, reqForm.drop.lat] },
+          date: reqForm.date || undefined,
+          timeRange: reqForm.timeStart ? { start: reqForm.timeStart, end: reqForm.timeStart } : undefined,
+        }),
+      });
+      setReqForm({ pickup: null, drop: null, date: '', timeStart: '' });
+      notify('ok', 'Ride request posted! Providers near your route will be notified.');
+    } catch (err) {
+      notify('err', err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /* mark notification as read */
+  async function markAsRead(id) {
+    try {
+      await apiFetch(`/notifications/${id}/read`, { method: 'PUT' });
+      fetchNotifications();
+    } catch (err) {
+      console.error('Failed to mark as read:', err);
+    }
+  }
 
   return (
-    <div className="narrow-wrap fade-up">
-      <h1 className="heading mb-4" style={{ fontSize: 28 }}>Route Alerts</h1>
-      <p className="text-muted mb-24 text-sm">Get notified when rides match your route, or post a ride request.</p>
+    <>
+      <style>{css}</style>
+      <div className="ra-wrap">
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-        {[{ k: 'my', l: '🔔 My Alerts' }, { k: 'sub', l: '➕ Subscribe' }, { k: 'req', l: '📢 Post Request' }].map(t => (
-          <button key={t.k} onClick={() => { setTab(t.k); setError(''); setSuccess(''); }}
-            style={{ padding: '8px 16px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13, background: tab === t.k ? '#6c63ff' : '#1a1a2e', color: tab === t.k ? '#fff' : '#aaa', border: '1px solid ' + (tab === t.k ? '#6c63ff' : '#333') }}>
-            {t.l}
-          </button>
-        ))}
-      </div>
+        <p className="ra-eyebrow">Notifications</p>
+        <h1 className="ra-title">Route Alerts</h1>
+        <p className="ra-sub">Get notified when rides match your route, or post a request for providers to see.</p>
 
-      {error   && <div className="alert alert-error mb-16">{error}</div>}
-      {success && <div className="alert alert-success mb-16">{success}</div>}
-
-      {/* My Alerts tab */}
-      {tab === 'my' && (
-        <div>
-          {loading ? <p className="text-muted">Loading...</p> : alerts.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">🔔</div>
-              <div className="empty-title">No alerts yet</div>
-              <div className="empty-sub mt-8">Subscribe to get notified when rides match your route.</div>
-              <button className="btn btn-primary mt-24" onClick={() => setTab('sub')}>Create Alert →</button>
+        {/* Urgent Notification Banner */}
+        {urgentNotification && (
+          <div className="ra-banner ra-banner-urgent" style={{ position: 'relative' }}>
+            <span style={{ fontSize: 20 }}>🔥</span>
+            <div style={{ flex: 1 }}>
+              <strong>{urgentNotification.notification.title}</strong>
+              <div style={{ marginTop: 4, fontSize: 12 }}>
+                {urgentNotification.notification.body}
+              </div>
+              <button 
+                onClick={() => navigate(`/ride/${urgentNotification.ride._id}`)}
+                style={{
+                  marginTop: 8,
+                  padding: '6px 12px',
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Book Now →
+              </button>
             </div>
-          ) : (
-            <div>
-              {alerts.map(a => (
-                <div key={a._id} style={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 12, padding: 16, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ color: '#fff', fontWeight: 600, marginBottom: 4 }}>{a.name || 'Route Alert'}</div>
-                    <div style={{ color: '#888', fontSize: 12 }}>Pickup radius: {(a.pickupRadius / 1000).toFixed(1)} km · Drop radius: {(a.dropRadius / 1000).toFixed(1)} km</div>
-                    {a.matchCount > 0 && <div style={{ color: '#2dd4a0', fontSize: 12, marginTop: 4 }}>✓ {a.matchCount} match{a.matchCount > 1 ? 'es' : ''} found</div>}
+            <button 
+              onClick={() => setUrgentNotification(null)}
+              style={{
+                position: 'absolute',
+                top: 8,
+                right: 8,
+                background: 'none',
+                border: 'none',
+                color: 'rgba(255,255,255,0.5)',
+                cursor: 'pointer',
+                fontSize: 16
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {error && <div className="ra-banner ra-banner-err">⚠ {error}</div>}
+        {success && <div className="ra-banner ra-banner-ok">✓ {success}</div>}
+
+        {/* Tabs */}
+        <div className="ra-tabs">
+          {[['alerts',`🔔 My Alerts${unreadCount > 0 ? ` (${unreadCount})` : ''}`], ['create','＋ New Alert'], ['request','🚗 Post Request']].map(([key, label]) => (
+            <button key={key} className={`ra-tab${tab === key ? ' active' : ''}`}
+              onClick={() => { setTab(key); setError(''); setSuccess(''); }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── My Alerts ── */}
+        {tab === 'alerts' && (
+          <div>
+            {loading ? (
+              <div className="ra-empty"><div className="ra-empty-icon">⏳</div>Loading your alerts…</div>
+            ) : alerts.length === 0 ? (
+              <div className="ra-empty">
+                <div className="ra-empty-icon">🔔</div>
+                No active alerts yet.<br/>Create one to get notified when rides match your route.
+              </div>
+            ) : (
+              <>
+                <div className="ra-section-label">{alerts.length} active alert{alerts.length !== 1 ? 's' : ''}</div>
+                {alerts.map(a => (
+                  <div key={a._id} className={`ra-alert-item${a.hasUrgentMatch ? ' urgent' : ''}`}>
+                    <div className={`ra-alert-icon${a.hasUrgentMatch ? ' urgent' : ''}`}>
+                      {a.hasUrgentMatch ? '🔥' : '🔔'}
+                    </div>
+                    <div className="ra-alert-body">
+                      <div className="ra-alert-name">
+                        {a.name || 'Route Alert'}
+                        {a.hasUrgentMatch && <span className="ra-alert-urgent-badge">Only {a.urgentSeats} left!</span>}
+                      </div>
+                      <div className="ra-alert-meta">
+                        Pickup radius: {(a.pickupRadius / 1000).toFixed(1)} km
+                        &nbsp;·&nbsp;
+                        Drop radius: {(a.dropRadius / 1000).toFixed(1)} km
+                        {a.matchCount > 0 && ` · ${a.matchCount} match${a.matchCount !== 1 ? 'es' : ''} found`}
+                      </div>
+                    </div>
+                    <button className="ra-alert-del" onClick={() => handleDelete(a._id)}>Delete</button>
                   </div>
-                  <button onClick={() => deleteAlert(a._id)}
-                    style={{ padding: '6px 12px', borderRadius: 6, background: '#3a1a1a', color: '#f87272', border: '1px solid #5a2a2a', cursor: 'pointer', fontSize: 12 }}>
-                    Delete
-                  </button>
+                ))}
+
+                {/* Recent Notifications */}
+                {notifications.length > 0 && (
+                  <>
+                    <div className="ra-section-label" style={{ marginTop: 32 }}>Recent Notifications</div>
+                    {notifications.slice(0, 5).map(n => (
+                      <div 
+                        key={n._id} 
+                        className="ra-alert-item"
+                        style={{ 
+                          opacity: n.readAt ? 0.6 : 1,
+                          cursor: n.data?.rideId ? 'pointer' : 'default'
+                        }}
+                        onClick={() => {
+                          if (!n.readAt) markAsRead(n._id);
+                          if (n.data?.rideId) navigate(`/ride/${n.data.rideId}`);
+                        }}
+                      >
+                        <div className="ra-alert-icon" style={{
+                          background: n.priority === 'critical' ? 'rgba(239,68,68,0.15)' : 
+                                     n.priority === 'high' ? 'rgba(245,158,11,0.15)' : 'rgba(59,130,246,0.15)'
+                        }}>
+                          {n.type === 'URGENT_AVAILABILITY' ? '🔥' : 
+                           n.type === 'BOOKING_CONFIRMED' ? '✅' : 
+                           n.type === 'ROUTE_MATCH' ? '🎯' : '🔔'}
+                        </div>
+                        <div className="ra-alert-body">
+                          <div className="ra-alert-name" style={{ fontSize: 13 }}>
+                            {n.title}
+                            {!n.readAt && <span style={{
+                              display: 'inline-block',
+                              width: 6,
+                              height: 6,
+                              background: '#f59e0b',
+                              borderRadius: '50%',
+                              marginLeft: 8,
+                              verticalAlign: 'middle'
+                            }} />}
+                          </div>
+                          <div className="ra-alert-meta">{n.body}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Create Alert ── */}
+        {tab === 'create' && (
+          <div className="ra-card">
+            <div className="ra-card-title">
+              <div className="ra-card-title-icon">🔔</div>
+              Create Route Alert
+            </div>
+            <form onSubmit={handleSubscribe}>
+              <div className="ra-field">
+                <label className="ra-label">Alert Name (optional)</label>
+                <input className="ra-input" placeholder="e.g. Home to College"
+                  value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+              </div>
+              <div className="ra-field">
+                <label className="ra-label">Pickup Location *</label>
+                <LocationSearch placeholder="Search pickup location"
+                  onLocationSelect={loc => setForm(f => ({ ...f, pickup: loc }))} />
+              </div>
+              <div className="ra-field">
+                <label className="ra-label">Drop Location *</label>
+                <LocationSearch placeholder="Search drop location"
+                  onLocationSelect={loc => setForm(f => ({ ...f, drop: loc }))} />
+              </div>
+              <div className="ra-field">
+                <label className="ra-label">Match Radius</label>
+                <div className="ra-radius-row">
+                  <span className="ra-radius-label">📍 Pickup</span>
+                  <input type="range" className="ra-slider" min="500" max="10000" step="500"
+                    value={form.pickupRadius} onChange={e => setForm(f => ({ ...f, pickupRadius: e.target.value }))} />
+                  <span className="ra-radius-val">{(form.pickupRadius / 1000).toFixed(1)} km</span>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+                <div className="ra-radius-row" style={{ marginTop: 8 }}>
+                  <span className="ra-radius-label">🏁 Drop</span>
+                  <input type="range" className="ra-slider" min="500" max="10000" step="500"
+                    value={form.dropRadius} onChange={e => setForm(f => ({ ...f, dropRadius: e.target.value }))} />
+                  <span className="ra-radius-val">{(form.dropRadius / 1000).toFixed(1)} km</span>
+                </div>
+              </div>
+              <button className="ra-btn" type="submit" disabled={submitting}>
+                {submitting ? 'Creating…' : 'Create Alert'}
+              </button>
+            </form>
+          </div>
+        )}
 
-      {/* Subscribe tab */}
-      {tab === 'sub' && (
-        <div style={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 12, padding: 20 }}>
-          <h3 style={{ color: '#fff', marginBottom: 4, fontSize: 16 }}>Create Route Alert</h3>
-          <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>We'll notify you when rides are posted on this route.</p>
-          <form onSubmit={handleSubscribe}>
-            <div className="field">
-              <label>Alert Name (optional)</label>
-              <input className="input" placeholder="e.g. Home to College" value={subName} onChange={e => setSubName(e.target.value)} />
+        {/* ── Post Request ── */}
+        {tab === 'request' && (
+          <div className="ra-card">
+            <div className="ra-card-title">
+              <div className="ra-card-title-icon">🚗</div>
+              Post a Ride Request
             </div>
-            <div className="field">
-              <label>Pickup Location ✶</label>
-              <PlaceInput placeholder="Type pickup area..." value={subPickup.label}
-                onSelect={p => setSubPickup({ label: p.label, lat: p.lat, lng: p.lng })} />
-              {subPickup.lat && <p style={{ fontSize: 11, color: '#2dd4a0', marginTop: 4 }}>✓ {subPickup.label}</p>}
-            </div>
-            <div className="field">
-              <label>Drop Location ✶</label>
-              <PlaceInput placeholder="Type drop area..." value={subDrop.label}
-                onSelect={p => setSubDrop({ label: p.label, lat: p.lat, lng: p.lng })} />
-              {subDrop.lat && <p style={{ fontSize: 11, color: '#2dd4a0', marginTop: 4 }}>✓ {subDrop.label}</p>}
-            </div>
-            <button type="submit" className="btn btn-primary btn-full" disabled={busy}>
-              {busy ? 'Creating...' : '🔔 Create Alert'}
-            </button>
-          </form>
-        </div>
-      )}
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)', marginBottom: 20 }}>
+              No rides found? Let providers near your route know you need a ride.
+            </p>
+            <form onSubmit={handlePostRequest}>
+              <div className="ra-field">
+                <label className="ra-label">Pickup Location *</label>
+                <LocationSearch placeholder="Search pickup"
+                  onLocationSelect={loc => setReqForm(f => ({ ...f, pickup: loc }))} />
+              </div>
+              <div className="ra-field">
+                <label className="ra-label">Drop Location *</label>
+                <LocationSearch placeholder="Search drop"
+                  onLocationSelect={loc => setReqForm(f => ({ ...f, drop: loc }))} />
+              </div>
+              <div className="ra-grid2">
+                <div className="ra-field">
+                  <label className="ra-label">Date (optional)</label>
+                  <input className="ra-input" type="date"
+                    value={reqForm.date} onChange={e => setReqForm(f => ({ ...f, date: e.target.value }))} />
+                </div>
+                <div className="ra-field">
+                  <label className="ra-label">Preferred time</label>
+                  <input className="ra-input" type="time"
+                    value={reqForm.timeStart} onChange={e => setReqForm(f => ({ ...f, timeStart: e.target.value }))} />
+                </div>
+              </div>
+              <button className="ra-btn" type="submit" disabled={submitting}>
+                {submitting ? 'Posting…' : 'Post Ride Request'}
+              </button>
+            </form>
+          </div>
+        )}
 
-      {/* Post Request tab */}
-      {tab === 'req' && (
-        <div style={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 12, padding: 20 }}>
-          <h3 style={{ color: '#fff', marginBottom: 4, fontSize: 16 }}>Post a Ride Request</h3>
-          <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>No rides found? Let providers know your route.</p>
-          <form onSubmit={handleRequest}>
-            <div className="field">
-              <label>Pickup Location ✶</label>
-              <PlaceInput placeholder="Type pickup area..." value={reqPickup.label}
-                onSelect={p => setReqPickup({ label: p.label, lat: p.lat, lng: p.lng })} />
-              {reqPickup.lat && <p style={{ fontSize: 11, color: '#2dd4a0', marginTop: 4 }}>✓ {reqPickup.label}</p>}
-            </div>
-            <div className="field">
-              <label>Drop Location ✶</label>
-              <PlaceInput placeholder="Type drop area..." value={reqDrop.label}
-                onSelect={p => setReqDrop({ label: p.label, lat: p.lat, lng: p.lng })} />
-              {reqDrop.lat && <p style={{ fontSize: 11, color: '#2dd4a0', marginTop: 4 }}>✓ {reqDrop.label}</p>}
-            </div>
-            <div className="field">
-              <label>Preferred Date (optional)</label>
-              <input className="input" type="date" min={new Date().toISOString().split('T')[0]}
-                value={reqDate} onChange={e => setReqDate(e.target.value)} />
-            </div>
-            <button type="submit" className="btn btn-primary btn-full" disabled={busy}>
-              {busy ? 'Posting...' : '📢 Post Ride Request'}
-            </button>
-          </form>
-        </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
