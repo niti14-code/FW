@@ -49,6 +49,8 @@ const PROVIDER_INCIDENT_TYPES = [
   'Other',
 ];
 
+const SEVERITY = ['Low', 'Medium', 'High', 'Critical'];
+
 export default function IncidentReport({ navigate }) {
   const { user } = useAuth();
   const isProvider = user?.role === 'provider' || user?.role === 'both';
@@ -58,7 +60,6 @@ export default function IncidentReport({ navigate }) {
   const [type,        setType]        = useState('');
   const [subject,     setSubject]     = useState('');
   const [description, setDescription] = useState('');
-  const [severity,    setSeverity]    = useState('Medium');
   const [loading,     setLoading]     = useState(false);
   const [error,       setError]       = useState('');
   const [success,     setSuccess]     = useState(null);
@@ -93,7 +94,7 @@ export default function IncidentReport({ navigate }) {
     if (!description.trim()) { setError('Please describe the incident'); return; }
     setLoading(true);
     try {
-      const inc = await api.reportIncident({ rideId, type, subject, description, severity });
+      const inc = await api.reportIncident({ rideId, type, subject, description });
       setSuccess(inc);
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
@@ -117,7 +118,7 @@ export default function IncidentReport({ navigate }) {
       <p className="text-muted mt-8 text-sm">Reference ID: <strong style={{ color:'#f5a623' }}>#{success.incident?._id?.slice(-8).toUpperCase() || 'N/A'}</strong></p>
       <p className="text-muted mt-4 text-sm">Admin will review and take action within 24 hours.</p>
       <div style={{ display:'flex', gap:12, justifyContent:'center', marginTop:24 }}>
-        <button className="btn btn-ghost" onClick={() => { setSuccess(null); setRideId(''); setType(''); setSubject(''); setDescription(''); setSeverity('Medium'); }}>Report Another</button>
+        <button className="btn btn-ghost" onClick={() => { setSuccess(null); setRideId(''); setType(''); setSubject(''); setDescription(''); }}>Report Another</button>
         <button className="btn btn-primary" onClick={() => navigate('dashboard')}>Back to Home</button>
       </div>
     </div>
@@ -233,8 +234,7 @@ export default function IncidentReport({ navigate }) {
             <div style={{ textAlign:'right', color:'#666', fontSize:11, marginTop:4 }}>{description.length} characters</div>
           </div>
 
-
-          <button type="submit" className={`btn btn-primary btn-lg btn-full ${loading ? 'btn-loading' : ''}`} disabled={loading || rides.length === 0}>
+                    <button type="submit" className={`btn btn-primary btn-lg btn-full ${loading ? 'btn-loading' : ''}`} disabled={loading || rides.length === 0}>
             {!loading && '🚨 Submit Incident Report'}
           </button>
           <p style={{ color:'#666', fontSize:11, textAlign:'center', marginTop:12 }}>

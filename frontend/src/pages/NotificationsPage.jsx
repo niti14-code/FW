@@ -15,6 +15,8 @@ const NOTIF_TYPES = {
   kyc_submitted:      { icon: '📋', color: '#888',    label: 'KYC Submitted'     },
   kyc_approved:       { icon: '🪪', color: '#2dd4a0', label: 'KYC Approved'      },
   kyc_rejected:       { icon: '🪪', color: '#ff6b6b', label: 'KYC Rejected'      },
+  kyc_revoked:        { icon: '🪪', color: '#ff8800', label: 'KYC Update'        },
+  account_removed:    { icon: '📢', color: '#ff4444', label: 'Account'           },
   alert_match:        { icon: '🔔', color: '#f5a623', label: 'Route Alert'       },
   incident_update:    { icon: '⚠️', color: '#ff8800', label: 'Incident Update'   },
   system:             { icon: '📢', color: '#555',    label: 'System'            },
@@ -31,18 +33,17 @@ export default function NotificationsPage({ navigate }) {
   const [requests,  setRequests]  = useState([]);
   const [alerts,    setAlerts]    = useState([]);
   const [incidents, setIncidents] = useState([]);
-  const [systemNotifications, setSystemNotifications] = useState([]);
   const [loading,   setLoading]   = useState(true);
+  const [serverInbox, setServerInbox] = useState([]);
+
+  useEffect(() => {
+    api.getNotifications().then((d) => setServerInbox(Array.isArray(d) ? d : [])).catch(() => setServerInbox([]));
+  }, []);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        // Load user-specific notifications from backend
-        const notifData = await api.getMyNotifications({ limit: 50 });
-        setSystemNotifications(notifData.notifications || []);
-        
-        // Load existing booking/ride data
         if (isSeeker) {
           const d = await api.getMyBookings();
           setBookings(d || []);
@@ -75,6 +76,16 @@ export default function NotificationsPage({ navigate }) {
 
   const buildNotifications = () => {
     const notifs = [];
+
+    serverInbox.forEach((n) => {
+      notifs.push({
+        id: `inbox-${n._id}`,
+        type: n.type || 'system',
+        title: n.title || 'CampusRide',
+        body: n.body || '',
+        time: n.createdAt,
+      });
+    });
 
     // ── SEEKER NOTIFICATIONS ─────────────────────────────────────
     bookings.forEach(b => {
@@ -242,43 +253,6 @@ export default function NotificationsPage({ navigate }) {
       });
     });
 
-    // ── SYSTEM NOTIFICATIONS ─────────────────────────────────────
-    systemNotifications.forEach(notif => {
-      // Handle specific notification types from backend
-      if (notif.type === 'PASSENGER_PICKED_UP') {
-        notifs.push({
-          id: notif._id,
-          type: 'passenger_picked_up',
-          title: notif.title,
-          body: notif.body,
-          time: notif.createdAt,
-          action: () => navigate('my-bookings'),
-          actionLabel: 'Track Ride'
-        });
-      } else if (notif.type === 'PASSENGER_DROPPED') {
-        notifs.push({
-          id: notif._id,
-          type: 'passenger_dropped',
-          title: notif.title,
-          body: notif.body,
-          time: notif.createdAt,
-          action: () => navigate('my-bookings'),
-          actionLabel: 'View Ride'
-        });
-      } else {
-        // Handle generic notification types
-        notifs.push({
-          id: notif._id,
-          type: notif.type?.toLowerCase() || 'system',
-          title: notif.title,
-          body: notif.body,
-          time: notif.createdAt,
-          action: () => navigate('dashboard'),
-          actionLabel: 'View'
-        });
-      }
-    });
-
     // Sort newest first
     return notifs.sort((a, b) => new Date(b.time || 0) - new Date(a.time || 0));
   };
@@ -289,7 +263,7 @@ export default function NotificationsPage({ navigate }) {
     { key: 'all',      label: 'All',       filter: () => true },
     { key: 'bookings', label: 'Bookings',  filter: n => n.type.includes('booking') },
     { key: 'rides',    label: 'Rides',     filter: n => n.type.includes('ride') || n.type.includes('pickup') || n.type.includes('drop') },
-    { key: 'kyc',      label: 'KYC',       filter: n => n.type.includes('kyc') },
+    { key: 'kyc',      label: 'KYC',       filter: n => n.type.includes('kyc') || n.type === 'kyc_revoked' },
     { key: 'alerts',   label: 'Alerts',    filter: n => n.type === 'alert_match' },
     { key: 'incidents',label: 'Incidents', filter: n => n.type.includes('incident') },
   ];
