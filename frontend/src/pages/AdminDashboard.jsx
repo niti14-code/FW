@@ -258,6 +258,24 @@ const css = `
     .ad-title { font-size: 32px; }
     .ad-wrap { padding: 24px 16px 80px; }
   }
+  .ad-btn-block {
+  padding: 5px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Sora', sans-serif;
+
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+
+  transition: background 0.15s;
+}
+
+.ad-btn-block:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
 `;
 
 /* ─── Main ───────────────────────────────────────────────────────── */
@@ -451,34 +469,86 @@ function OverviewTab({ stats: s, loading, setTab }) {
 }
 //__________________Users Tab________________________________
 function UsersTab({ notify }) {
-  const [users,setUsers]=useState([]);
-  const [loading,setLoading]=useState(true);
-  const [search,setSearch]=useState('');
-  const [roleFilter,setRoleFilter]=useState('');
-  const [acting,setActing]=useState({});
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState(''); // NEW: 'active', 'suspended', 'blocked'
+  const [acting, setActing] = useState({});
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const p = new URLSearchParams();
-      if (search) p.set('search',search);
-      if (roleFilter) p.set('role',roleFilter);
+      if (search) p.set('search', search);
+      if (roleFilter) p.set('role', roleFilter);
+      if (statusFilter) p.set('blocked', statusFilter === 'blocked' ? 'true' : 'false');
       const data = await apiFetch(`/admin/users?${p}`);
       setUsers(Array.isArray(data) ? data : []);
-    } catch(e) { notify(e.message,'err'); }
+    } catch (e) { notify(e.message, 'err'); }
     finally { setLoading(false); }
-  },[search,roleFilter]);
+  }, [search, roleFilter, statusFilter]);
 
-  useEffect(()=>{ load(); },[load]);
+  useEffect(() => { load(); }, [load]);
 
   async function toggleSuspend(id) {
-    setActing(a=>({...a,[id]:true}));
+    setActing(a => ({ ...a, [id]: 'suspending' }));
     try {
-      const data = await apiFetch(`/admin/users/${id}/suspend`,{method:'PUT'});
-      setUsers(prev=>prev.map(u=>u._id===id?data.user:u));
+      const data = await apiFetch(`/admin/users/${id}/suspend`, { method: 'PUT' });
+      setUsers(prev => prev.map(u => u._id === id ? data.user : u));
       notify(data.message);
-    } catch(e) { notify(e.message,'err'); }
-    finally { setActing(a=>({...a,[id]:false})); }
+    } catch (e) { notify(e.message, 'err'); }
+    finally { setActing(a => ({ ...a, [id]: null })); }
+  }
+
+  // NEW: Block user function
+  async function blockUser(id) {
+    const reason = prompt('Enter block reason:', 'Violation of terms');
+    if (!reason) return;
+
+    setActing(a => ({ ...a, [id]: 'blocking' }));
+    try {
+      const data = await apiFetch(`/admin/users/${id}/block`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      });
+      setUsers(prev => prev.map(u => u._id === id ? { 
+        ...u, 
+        blocked: true, 
+        suspended: true, 
+        blockReason: reason,
+        blockedAt: new Date()
+      } : u));
+      notify(data.message);
+    } catch (e) { 
+      notify(e.message, 'err'); 
+    }
+    finally { 
+      setActing(a => ({ ...a, [id]: null })); 
+    }
+  }
+
+  // NEW: Unblock user function
+  async function unblockUser(id) {
+    if (!confirm('Are you sure you want to unblock this user?')) return;
+
+    setActing(a => ({ ...a, [id]: 'unblocking' }));
+    try {
+      const data = await apiFetch(`/admin/users/${id}/unblock`, { method: 'POST' });
+      setUsers(prev => prev.map(u => u._id === id ? { 
+        ...u, 
+        blocked: false, 
+        suspended: false, 
+        blockReason: '',
+        blockedAt: null
+      } : u));
+      notify(data.message);
+    } catch (e) { 
+      notify(e.message, 'err'); 
+    }
+    finally { 
+      setActing(a => ({ ...a, [id]: null })); 
+    }
   }
 
   async function deleteUser(id) {
@@ -495,19 +565,20 @@ function UsersTab({ notify }) {
 
   return (
     <div>
-      <input 
-        className="ad-search" 
-        placeholder="🔍  Search by name or email…" 
-        value={search} 
-        onChange={e=>setSearch(e.target.value)} 
+      <input
+        className="ad-search"
+        placeholder="🔍  Search by name or email…"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
       />
 
+      {/* Role Filter */}
       <div className="ad-filter-row">
-        {[['','All'],['provider','Providers'],['seeker','Seekers'],['both','Both']].map(([v,l])=>(
-          <button 
-            key={v} 
-            className={`ad-filter-btn${roleFilter===v?' active':''}`} 
-            onClick={()=>setRoleFilter(v)}
+        {[['', 'All'], ['provider', 'Providers'], ['seeker', 'Seekers'], ['both', 'Both']].map(([v, l]) => (
+          <button
+            key={v}
+            className={`ad-filter-btn${roleFilter === v ? ' active' : ''}`}
+            onClick={() => setRoleFilter(v)}
           >
             {l}
           </button>
@@ -531,18 +602,18 @@ function UsersTab({ notify }) {
             </thead>
 
             <tbody>
-              {users.length===0 ? (
+              {users.length === 0 ? (
                 <tr>
-                  <td colSpan={8} style={{textAlign:'center',padding:40,color:'rgba(255,255,255,0.25)'}}>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'rgba(255,255,255,0.25)' }}>
                     No users found
                   </td>
                 </tr>
-              ) : users.map(u=>(
+              ) : users.map(u => (
                 <tr key={u._id}>
                   <td>
                     <div className="ad-user-cell">
-                      <div className={`ad-avatar${u.suspended?' suspended':''}`}>
-                        {u.name?.charAt(0)?.toUpperCase()||'?'}
+                      <div className={`ad-avatar${u.suspended || u.blocked ? ' suspended' : ''}`}>
+                        {u.name?.charAt(0)?.toUpperCase() || '?'}
                       </div>
                       <div>
                         <div className="ad-user-name">{u.name}</div>
@@ -557,53 +628,88 @@ function UsersTab({ notify }) {
                     </span>
                   </td>
 
-                  <td style={{fontSize:12,color:'rgba(255,255,255,0.42)',maxWidth:140}}>
-                    {u.college||'—'}
+                  <td style={{ fontSize: 12, color: 'rgba(255,255,255,0.42)', maxWidth: 140 }}>
+                    {u.college || '—'}
                   </td>
 
                   <td>
-                    <span className={`ad-badge ad-badge-${u.kycStatus==='not_required'?'suspended':u.kycStatus}`}>
-                      {u.kycStatus==='not_required'?'N/A':u.kycStatus}
+                    <span className={`ad-badge ad-badge-${u.kycStatus === 'not_required' ? 'suspended' : u.kycStatus}`}>
+                      {u.kycStatus === 'not_required' ? 'N/A' : u.kycStatus}
                     </span>
                   </td>
 
-                  <td style={{fontWeight:600}}>
-                    {u.totalRides||0}
+                  <td style={{ fontWeight: 600 }}>
+                    {u.totalRides || 0}
                   </td>
 
-                  <td style={{fontSize:12,color:'rgba(255,255,255,0.32)'}}>
-                    {new Date(u.createdAt).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}
+                  <td style={{ fontSize: 12, color: 'rgba(255,255,255,0.32)' }}>
+                    {new Date(u.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
                   </td>
 
+                  {/* UPDATED: Status column with blocked status */}
                   <td>
-                    <span className={`ad-badge ${u.suspended?'ad-badge-suspended':'ad-badge-active'}`}>
-                      {u.suspended?'Suspended':'Active'}
-                    </span>
+                    {u.blocked ? (
+                      <span className="ad-badge ad-badge-blocked" title={u.blockReason}>
+                        🚫 BLOCKED
+                      </span>
+                    ) : u.suspended ? (
+                      <span className="ad-badge ad-badge-suspended">Suspended</span>
+                    ) : (
+                      <span className="ad-badge ad-badge-active">Active</span>
+                    )}
                   </td>
 
+                  {/* UPDATED: Actions column with block/unblock */}
                   <td>
                     <div className="ad-actions">
-                      {u.suspended
-                        ? <button 
-                            className="ad-btn-activate" 
-                            disabled={acting[u._id]} 
-                            onClick={()=>toggleSuspend(u._id)}
+                      {/* Suspend/Activate - disabled if blocked */}
+                      {!u.blocked && (
+                        u.suspended ? (
+                          <button
+                            className="ad-btn-activate"
+                            disabled={acting[u._id]}
+                            onClick={() => toggleSuspend(u._id)}
                           >
-                            {acting[u._id]?'…':'Activate'}
+                            {acting[u._id] === 'suspending' ? '…' : 'Activate'}
                           </button>
-                        : <button 
-                            className="ad-btn-suspend"  
-                            disabled={acting[u._id]} 
-                            onClick={()=>toggleSuspend(u._id)}
+                        ) : (
+                          <button
+                            className="ad-btn-suspend"
+                            disabled={acting[u._id]}
+                            onClick={() => toggleSuspend(u._id)}
                           >
-                            {acting[u._id]?'…':'Suspend'}
+                            {acting[u._id] === 'suspending' ? '…' : 'Suspend'}
                           </button>
-                      }
+                        )
+                      )}
 
-                      {/* ✅ DELETE BUTTON */}
-                      <button 
+                      {/* NEW: Block/Unblock button */}
+                      {!u.blocked ? (
+                        <button
+                          className="ad-btn-block"
+                          disabled={acting[u._id]}
+                          onClick={() => blockUser(u._id)}
+                          title="Block user permanently"
+                        >
+                          {acting[u._id] === 'blocking' ? '…' : '🚫 Block'}
+                        </button>
+                      ) : (
+                        <button
+                          className="ad-btn-activate"
+                          disabled={acting[u._id]}
+                          onClick={() => unblockUser(u._id)}
+                          title="Unblock user"
+                        >
+                          {acting[u._id] === 'unblocking' ? '…' : '✓ Unblock'}
+                        </button>
+                      )}
+
+                      {/* Delete button - disabled if blocked (must unblock first) */}
+                      <button
                         className="ad-btn-delete"
                         onClick={() => deleteUser(u._id)}
+                        disabled={u.blocked}
+                        title={u.blocked ? 'Unblock before deleting' : 'Delete user'}
                       >
                         Delete
                       </button>

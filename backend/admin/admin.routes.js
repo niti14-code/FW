@@ -31,6 +31,10 @@ router.put('/incidents/:id/status', controller.updateIncidentStatus);
 router.get('/settings', controller.getAllSettings);
 router.post('/settings', controller.setSetting);
 router.get('/settings/:key', controller.getSetting);
+// NEW: Block/Unblock routes
+router.post('/users/:id/block', controller.blockUser);
+router.post('/users/:id/unblock', controller.unblockUser);
+router.get('/users/blocked', controller.getBlockedUsers);
 
 router.delete('/users/:id', controller.deleteUser);
 

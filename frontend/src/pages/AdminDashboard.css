@@ -104,3 +104,33 @@
 .kyc-error-icon  { font-size: 36px; }
 .kyc-error-title { font-size: 18px; font-weight: 700; color: var(--red); }
 .kyc-error-msg   { font-size: 13px; color: var(--text2); max-width: 480px; line-height: 1.6; }
+/* Blocked badge */
+.ad-badge-blocked {
+  background: rgba(220, 38, 38, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(220, 38, 38, 0.4);
+}
+/* Block button*/
+.ad-btn-block {
+  padding: 5px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Sora', sans-serif;
+
+  background: rgba(239, 68, 68, 0.08);   /* SAME as delete */
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+
+  transition: background 0.15s;
+}
+
+.ad-btn-block:hover {
+  background: rgba(239, 68, 68, 0.18);
+}
+
+.ad-btn-block:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

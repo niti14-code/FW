@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  name:     { type: String, required: true },
-  email:    { type: String, required: true, unique: true },
-  phone:    { type: String, required: true },
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  phone: { type: String, required: true },
   password: { type: String, required: true },
   role: {
     type: String,
@@ -14,34 +14,42 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: function () { return this.role !== 'admin'; }
   },
-  suspended: {
-  type: Boolean,
-  default: false
+  
+  // Existing fields...
+  suspended: { type: Boolean, default: false },
+  
+  // NEW: Block user fields
+  blocked: {
+    type: Boolean,
+    default: false
+  },
+  blockReason: {
+    type: String,
+    default: ''
+  },
+  blockedAt: {
+    type: Date
+  },
+  blockedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
 
-  // Ratings aggregate (updated by ratings controller)
-  rating:        { type: Number, default: 0 },
-  averageRating: { type: Number, default: 0 },
-  totalRatings:  { type: Number, default: 0 },
-
-  totalRides: { type: Number, default: 0 },
-  suspended:  { type: Boolean, default: false },
-
-  // KYC fields - updated for new flow
+  // KYC fields...
   kycStatus: {
     type: String,
     enum: ['pending', 'approved', 'rejected', 'not_submitted', 'not_required'],
     default: 'not_submitted'
   },
   kycDocuments: {
-    aadhar:         String,
+    aadhar: String,
     drivingLicense: String,
-    collegeIdCard:  String,
-    selfie:         String      // Added for selfie verification
+    collegeIdCard: String,
+    selfie: String
   },
-  kycSubmittedAt:   { type: Date },      // Added: track submission time
-  kycVerifiedAt:    { type: Date },      // Added: track verification time
-  kycRemarks:       { type: String },    // Added: admin rejection reason
+  kycSubmittedAt: { type: Date },
+  kycVerifiedAt: { type: Date },
+  kycRemarks: { type: String },
   
   emergencyContact: { type: String, default: '' },
 }, { timestamps: true });

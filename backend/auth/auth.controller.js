@@ -11,6 +11,29 @@ const register = async (req, res) => {
       aadhar, drivingLicense, collegeIdCard,
       emergencyContact
     } = req.body;
+     // NEW: Check if this email was previously blocked
+    const blockedUser = await User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, 'i') },
+      blocked: true
+    });
+
+    if (blockedUser) {
+      return res.status(403).json({ 
+        message: 'This account has been blocked. Please contact support for assistance.' 
+      });
+    }
+
+    // Also check by phone number if blocked
+    const blockedPhone = await User.findOne({
+      phone: phone,
+      blocked: true
+    });
+
+    if (blockedPhone) {
+      return res.status(403).json({ 
+        message: 'This phone number has been blocked. Please contact support.' 
+      });
+    }
 
     console.log('🔍 Registration attempt:', { email, name, role });
 
@@ -102,6 +125,12 @@ const login = async (req, res) => {
     });
 
     if (!user) return res.status(400).json({ message: 'Invalid credentials' });
+    // NEW: Check if user is blocked
+    if (user.blocked) {
+      return res.status(403).json({ 
+        message: `Your account has been blocked. Reason: ${user.blockReason}. Contact support for assistance.` 
+      });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
