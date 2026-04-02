@@ -192,10 +192,21 @@ export default function ProviderBookings({ navigate }) {
                         <span className="pb2-ride-date">{dateStr} · {r.time}</span>
                         <span className="pb2-status-dot" style={{background: rideStatusColor(r.status)}} />
                       </div>
-                      <div className="pb2-ride-meta">
-                        <span>💺 {r.seatsAvailable} seats</span>
-                        <span>₹{r.costPerSeat}/seat</span>
-                      </div>
+                      <div className="pb2-ride-route">
+  <div className="pb2-route-line">
+    <span className="pb2-dot start"></span>
+    <span className="pb2-location">{r.pickup?.address || 'Unknown'}</span>
+  </div>
+  <div className="pb2-route-line">
+    <span className="pb2-dot end"></span>
+    <span className="pb2-location">{r.drop?.address || 'Unknown'}</span>
+  </div>
+</div>
+
+<div className="pb2-ride-meta">
+  <span>💺 {r.seatsAvailable} seats</span>
+  <span>₹{r.costPerSeat}/seat</span>
+</div>
                       <div className="pb2-ride-status-label" style={{color: rideStatusColor(r.status)}}>
                         {r.status}
                       </div>

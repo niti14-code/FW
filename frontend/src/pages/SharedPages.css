@@ -104,24 +104,43 @@
 /* Ride list in sidebar */
 .pb2-ride-list { padding: 6px; }
 .pb2-ride-item {
-  width: 100%; text-align: left;
-  padding: 12px 14px; border-radius: 12px;
-  border: none; background: none; cursor: pointer;
-  transition: background 0.15s; margin-bottom: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.2s ease;
+  margin-bottom: 10px;
 }
-.pb2-ride-item:hover    { background: var(--surface2); }
-.pb2-ride-item.active   { background: var(--accent-dim); }
+
+.pb2-ride-item:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.pb2-ride-item.active {
+  border-color: #6366f1;
+  background: rgba(99,102,241,0.08);
+}
 .pb2-ride-item.cancelled{ opacity: 0.5; }
 
 .pb2-ride-top {
-  display: flex; align-items: center;
-  justify-content: space-between; margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 6px;
 }
 .pb2-ride-date  { font-size: 13.5px; font-weight: 600; color: var(--text); }
 .pb2-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.pb2-ride-meta  {
-  display: flex; gap: 10px;
-  font-size: 11.5px; color: var(--text3); margin-bottom: 3px;
+.pb2-ride-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 6px;
 }
 .pb2-ride-status-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 
@@ -182,16 +201,23 @@
 .pb2-cards { display: flex; flex-direction: column; gap: 10px; }
 
 .pb2-bk-card {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; flex-wrap: wrap;
-  padding: 18px 20px; border-radius: 16px;
-  background: var(--surface); border: 1px solid var(--border);
-  transition: border-color 0.15s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 12px;
 }
 .pb2-bk-card:hover        { border-color: rgba(255,255,255,0.12); }
 .pb2-bk-card-resolved     { opacity: 0.7; }
 
-.pb2-bk-left  { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.pb2-bk-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
 .pb2-bk-right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex-shrink: 0; }
 
 .pb2-bk-avatar {
@@ -202,11 +228,27 @@
 }
 .pb2-bk-avatar-dim { background: var(--surface3); color: var(--text3); }
 
-.pb2-bk-name    { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
-.pb2-bk-college { font-size: 11.5px; color: var(--text3); margin-bottom: 2px; }
-.pb2-bk-time    { font-size: 11px; color: var(--text3); }
+.pb2-bk-name {
+  font-size: 14px;
+  font-weight: 600;
+}
 
-.pb2-bk-actions { display: flex; gap: 8px; }
+.pb2-bk-time {
+  font-size: 11px;
+  color: #888;
+}
+.pb2-bk-college { font-size: 11.5px; color: var(--text3); margin-bottom: 2px; }
+
+.pb2-bk-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-sm {
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
 .pb2-done-label { font-size: 12px; font-weight: 600; color: var(--green); }
 
 @media (max-width: 760px) {
@@ -214,4 +256,39 @@
   .pb2-sidebar { position: static; }
   .pb2-bk-card { flex-direction: column; align-items: flex-start; }
   .pb2-bk-right { align-items: flex-start; flex-direction: row; flex-wrap: wrap; }
+}
+
+.pb2-ride-route {
+  margin: 10px 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pb2-route-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pb2-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.pb2-dot.start {
+  background: #22c55e;
+}
+
+.pb2-dot.end {
+  background: #ef4444;
+}
+
+.pb2-location {
+  font-size: 13px;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -140,11 +140,10 @@ exports.reviewKyc = async (req, res) => {
 };
 
 // Serve KYC document image
-
 exports.getDocumentImage = async (req, res) => {
   try {
     const { userId, docType } = req.params;
-    
+
     // Validate docType
     const validDocTypes = ['aadhar', 'collegeIdCard', 'drivingLicense', 'selfie'];
     if (!validDocTypes.includes(docType)) {
@@ -156,24 +155,33 @@ exports.getDocumentImage = async (req, res) => {
       return res.status(404).json({ message: 'Document not found' });
     }
 
-    const filename = user.kycDocuments[docType];
-    
-    // If it's base64 or URL, redirect to it
-    if (filename.startsWith('data:') || filename.startsWith('http')) {
-      return res.redirect(filename);
+    const fileData = user.kycDocuments[docType];
+
+    // ✅ CASE 1: BASE64 IMAGE (YOUR MAIN CASE)
+    if (fileData.startsWith('data:image')) {
+      const base64Data = fileData.split(',')[1];
+      const mimeType = fileData.match(/data:(image\/.*);base64/)[1];
+
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      res.setHeader('Content-Type', mimeType);
+      return res.send(buffer);
     }
 
-    // Otherwise, serve from uploads folder
-    const uploadDir = process.env.UPLOAD_DIR || './uploads/kyc';
-    const filePath = path.join(uploadDir, filename);
+    // ✅ CASE 2: EXTERNAL URL (optional)
+    if (fileData.startsWith('http://') || fileData.startsWith('https://')) {
+      return res.redirect(fileData);
+    }
 
-    // Check if file exists
+    // ❌ CASE 3: LOCAL FILE (avoid using this in production)
+    const uploadDir = process.env.UPLOAD_DIR || './uploads/kyc';
+    const filePath = path.join(uploadDir, fileData);
+
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ message: 'File not found on server' });
     }
 
-    // Set proper content type
-    const ext = path.extname(filename).toLowerCase();
+    const ext = path.extname(fileData).toLowerCase();
     const contentType = {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
@@ -182,7 +190,8 @@ exports.getDocumentImage = async (req, res) => {
     }[ext] || 'application/octet-stream';
 
     res.setHeader('Content-Type', contentType);
-    res.sendFile(path.resolve(filePath));
+    return res.sendFile(path.resolve(filePath));
+
   } catch (error) {
     console.error('Error serving document:', error);
     res.status(500).json({ error: error.message });

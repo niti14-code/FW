@@ -105,20 +105,6 @@
 }
 
 /* Button Overrides */
-.btn {
-  padding: 14px 24px;
-  border: none;
-  border-radius: var(--radius-lg);
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: center;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
 
 .btn:disabled {
   opacity: 0.6;
@@ -126,10 +112,7 @@
   transform: none;
 }
 
-.btn-primary {
-  background: var(--accent);
-  color: white;
-}
+
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-dark);
@@ -137,10 +120,6 @@
   box-shadow: 0 4px 12px rgba(245, 166, 35, 0.3);
 }
 
-.btn-success {
-  background: #22c55e;
-  color: white;
-}
 
 .btn-success:hover:not(:disabled) {
   background: #16a34a;
@@ -148,20 +127,11 @@
   box-shadow: 0 4px 12px rgba(34, 197, 94, 0.3);
 }
 
-.btn-warning {
-  background: #f59e0b;
-  color: white;
-}
 
 .btn-warning:hover:not(:disabled) {
   background: #d97706;
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
-}
-
-.btn-danger {
-  background: #ef4444;
-  color: white;
 }
 
 .btn-danger:hover:not(:disabled) {
@@ -196,4 +166,32 @@
     text-align: center;
     gap: 12px;
   }
+}
+
+.action-buttons .btn {
+  width: 100%;
+}
+
+.action-buttons .btn-lg {
+  height: 46px;
+  font-size: 14px;
+}
+
+.tsf-checklist-card {
+  background: rgba(245,166,35,0.08);
+  border: 1px solid rgba(245,166,35,0.25);
+  border-radius: 16px;
+  padding: 18px;
+  text-align: center;
+}
+
+.tsf-checklist-card h5 {
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.tsf-checklist-card p {
+  color: var(--text2);
+  font-size: 13px;
+  margin-bottom: 12px;
 }

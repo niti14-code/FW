@@ -20,16 +20,21 @@ export default function KYCPage({ navigate }) {
 
   const getDocUrl = (docType, filename) => {
   if (!filename) return null;
-  // If it's already a full URL or base64, use as-is
-  if (filename.startsWith('http') || filename.startsWith('data:')) {
+
+  // ✅ If base64 → use directly (THIS IS YOUR MAIN FIX)
+  if (filename.startsWith('data:image')) {
     return filename;
   }
-  // Otherwise, construct API URL
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-  // Use user.id or user._id depending on your auth context
-  const userId = user?.id || user?._id;
-  return `${API_BASE_URL}/api/kyc/document/${userId}/${docType}`;
-};
+
+  // ✅ If external URL → allow
+  if (filename.startsWith('http')) {
+    return filename;
+  }
+
+  // ❌ Ignore everything else (like "dsa1.jpg")
+  console.warn("Invalid image format:", filename);
+  return null;
+  };
 
   // Fetch existing KYC status on load
   useEffect(() => {

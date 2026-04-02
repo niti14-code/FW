@@ -101,11 +101,30 @@ main.with-nav { padding-top: var(--nav-h); }
    BUTTONS
 ══════════════════════════════════════════════ */
 .btn {
-  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 12px 22px; border-radius: var(--radius);
-  border: none; font-size: 14px; font-weight: 600;
-  transition: all 0.18s ease; white-space: nowrap; text-decoration: none;
+  display: inline-flex;
+  align-items: center;          /* ✅ vertical center FIX */
+  justify-content: center;      /* ✅ horizontal center */
+  gap: 8px;
+
+  height: 42px;                 /* ✅ FIXED HEIGHT (IMPORTANT) */
+  padding: 0 18px;              /* ✅ remove vertical padding */
+
+  border-radius: var(--radius);
+  border: none;
+
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;               /* ✅ TEXT ALIGNMENT FIX */
+
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  text-decoration: none;
+
   font-family: var(--font-body);
+}
+.btn > span {
+  display: flex;
+  align-items: center;
 }
 .btn-primary  { background: var(--accent); color: #000; font-family: var(--font-display); letter-spacing: 0.2px; }
 .btn-primary:hover { background: #f9bc52; transform: translateY(-1px); box-shadow: 0 6px 22px var(--accent-glow); }
@@ -127,6 +146,12 @@ main.with-nav { padding-top: var(--nav-h); }
 .btn-lg  { padding: 15px 28px; font-size: 15px; border-radius: var(--radius-lg); }
 .btn-full { width: 100%; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+}
 
 /* Loading spinner on button */
 .btn-loading { position: relative; color: transparent !important; pointer-events: none; }

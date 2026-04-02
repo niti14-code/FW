@@ -154,10 +154,9 @@ export default function TripStatusFlow({ ride, onUpdate }) {
           {status === 'active' && !allChecksDone && (
             <button
               className="btn btn-secondary btn-lg"
-              disabled={true}
-              style={{opacity: 0.5, cursor: 'not-allowed'}}
-            >
-              🔒 Complete Checklist First
+               disabled
+              >
+             <span>🔒</span> Complete Checklist First
             </button>
           )}
 
