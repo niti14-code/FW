@@ -9,8 +9,19 @@ const register = async (req, res) => {
     const {
       name, email, password, phone, role, college,
       aadhar, drivingLicense, collegeIdCard,
-      emergencyContact
+      emergencyContact,adminKey
     } = req.body;
+
+    // 🔐 ADMIN KEY VALIDATION
+if (role === 'admin') {
+  const ADMIN_KEY = 'freewheel'; // or use process.env.ADMIN_KEY
+
+  if (adminKey !== ADMIN_KEY) {
+    return res.status(403).json({
+      message: 'Invalid admin key. You are not authorized to register as admin.'
+    });
+  }
+}
      // NEW: Check if this email was previously blocked
     const blockedUser = await User.findOne({
       email: { $regex: new RegExp(`^${email}$`, 'i') },
@@ -167,7 +178,15 @@ const getMe = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+// admin verification using admin key
+/*const { adminKey } = req.body;
 
+if (role === 'admin' && adminKey !== 'freewheel') {
+  return res.status(403).json({
+    message: 'Invalid admin key'
+  });
+}
+*/
 module.exports = { register, login, getMe };
 
 /*const bcrypt = require('bcryptjs');

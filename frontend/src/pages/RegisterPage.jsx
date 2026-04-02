@@ -20,6 +20,8 @@ export default function RegisterPage({ navigate }) {
   const [confirmPass, setConfirmPass] = useState('');
   const [kycDocs,     setKycDocs]     = useState({ aadhar: null, license: null, collegeId: null });
   const [emergencyContact, setEmergency] = useState('');
+  const [role, setRole] = useState('');
+const [adminKey, setAdminKey] = useState('');
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
@@ -49,6 +51,9 @@ export default function RegisterPage({ navigate }) {
     if (form.password.length < 6) return 'Password must be at least 6 characters';
     if (form.password !== confirmPass) return 'Passwords do not match';
     if (!form.phone.trim())   return 'Phone number is required';
+    if (form.role === 'admin' && adminKey !== 'freewheel') {
+      return 'Invalid admin key';
+    }
     return null;
   };
 
@@ -61,6 +66,7 @@ export default function RegisterPage({ navigate }) {
     try {
       await registerUser({
         ...form,
+        adminKey,
         emergencyContact,
         // Pass filenames so backend stores them in kycDocuments
         aadhar:         kycDocs.aadhar    ? kycDocs.aadhar.name    : '',
@@ -171,6 +177,23 @@ export default function RegisterPage({ navigate }) {
               ))}
             </div>
           </div>
+
+          {/* ADMIN KEY (ONLY FOR ADMIN) */}
+{form.role === 'admin' && (
+  <div className="field">
+    <label>Admin Key</label>
+    <div className="input-wrap">
+      <span className="input-icon">🔑</span>
+      <input
+        className="input"
+        type="password"
+        placeholder="Enter admin key"
+        value={adminKey}
+        onChange={(e) => setAdminKey(e.target.value)}
+      />
+    </div>
+  </div>
+)}
 
           {/* Password with show/hide */}
           <div className="field">

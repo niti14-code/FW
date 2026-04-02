@@ -11,7 +11,7 @@ export default function LoginPage({ navigate }) {
   const [showForgot,  setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail]= useState('');
   const [forgotSent,  setForgotSent] = useState(false);
-
+  
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const submit = async e => {
