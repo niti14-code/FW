@@ -7,7 +7,8 @@ const Notification = require('../notifications/notifications.model');
 // ================= REQUEST BOOKING (Seeker) =================
 exports.requestBooking = async (req, res) => {
   try {
-    const { rideId } = req.body;
+    //const { rideId } = req.body;
+    const { rideId, seats } = req.body;
     const seekerId = req.user.userId;
 
     // Check if ride exists and is active
@@ -29,18 +30,26 @@ exports.requestBooking = async (req, res) => {
     }
 
     // Create booking
-    const booking = new Booking({
-      rideId,
-      seekerId,
-      status: 'pending'
-    });
+    const requestedSeats = seats || 1;
 
-    await booking.save();
+// Validate seats
+if (ride.seatsAvailable < requestedSeats) {
+  return res.status(400).json({ message: 'Not enough seats available' });
+}
 
-    // Decrease available seats
-    ride.seatsAvailable -= 1;
-    await ride.save();
+// Create booking WITH seats
+const booking = new Booking({
+  rideId,
+  seekerId,
+  seats: requestedSeats, // ✅ FIX
+  status: 'pending'
+});
 
+await booking.save();
+
+// Decrease seats properly
+ride.seatsAvailable -= requestedSeats; // ✅ FIX
+await ride.save();
     // ================= PROVIDER NOTIFICATION: New Booking Request =================
     try {
       const providerNotification = new Notification({
@@ -212,7 +221,7 @@ exports.respondBooking = async (req, res) => {
     // If rejecting, restore the seat
     if (status === 'rejected' && booking.status !== 'rejected') {
       const ride = await Ride.findById(booking.rideId);
-      ride.seatsAvailable += 1;
+      ride.seatsAvailable += booking.seats || 1;
       await ride.save();
     }
 

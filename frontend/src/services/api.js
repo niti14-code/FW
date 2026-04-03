@@ -509,8 +509,11 @@ export const cancelRide   = (rideId, reason) =>
 // ══════════════════════════════════════════════════════════════════
 //  BOOKINGS
 // ══════════════════════════════════════════════════════════════════
-export const requestBooking = (rideId) =>
-  request('/booking/request', { method: 'POST', body: JSON.stringify({ rideId }) });
+export const requestBooking = (rideId, seats) =>
+  request('/booking/request', {
+    method: 'POST',
+    body: JSON.stringify({ rideId, seats })
+  });
 
 export const respondBooking = (bookingId, status) =>
   request('/booking/respond', { method: 'PUT', body: JSON.stringify({ bookingId, status }) });
@@ -632,3 +635,13 @@ export const addCommunityReply = (postId, content) =>
     method: 'POST',
     body: JSON.stringify({ content })
   });
+
+  export const getNotifications = async () => {
+  try {
+    const res = await fetch("/api/notifications");
+    return await res.json();
+  } catch (err) {
+    console.error("getNotifications error:", err);
+    return [];
+  }
+};

@@ -15,6 +15,7 @@ import RatingsPage      from "./pages/RatingsPage.jsx";
 import LiveTracking     from "./pages/LiveTracking.jsx";
 import CommunityPage    from "./pages/CommunityPage.jsx";
 import RouteAlerts      from "./pages/RouteAlerts.jsx";
+import NotificationsPage from "./pages/NotificationsPage.jsx";
 import IncidentReport   from "./pages/IncidentReport.jsx";
 import AdminSettings    from "./pages/AdminSettings.jsx";
 
@@ -33,6 +34,7 @@ const PAGE_MAP = {
   "live-tracking":     LiveTracking,
   "community":         CommunityPage,
   "route-alerts":      RouteAlerts,
+  "notifications": NotificationsPage,
   "incident-report":   IncidentReport,
   "admin-settings":    AdminSettings,
 };

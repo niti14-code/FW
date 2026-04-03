@@ -156,7 +156,7 @@ export default function TripStatusFlow({ ride, onUpdate }) {
               className="btn btn-secondary btn-lg"
                disabled
               >
-             <span>🔒</span> Complete Checklist First
+             <span>🔒</span> Complete Checklist
             </button>
           )}
 

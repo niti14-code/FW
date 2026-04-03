@@ -264,7 +264,7 @@ export default function NotificationsPage({ navigate }) {
     { key: 'bookings', label: 'Bookings',  filter: n => n.type.includes('booking') },
     { key: 'rides',    label: 'Rides',     filter: n => n.type.includes('ride') || n.type.includes('pickup') || n.type.includes('drop') },
     { key: 'kyc',      label: 'KYC',       filter: n => n.type.includes('kyc') || n.type === 'kyc_revoked' },
-    { key: 'alerts',   label: 'Alerts',    filter: n => n.type === 'alert_match' },
+   // { key: 'alerts',   label: 'Alerts',    filter: n => n.type === 'alert_match' },
     { key: 'incidents',label: 'Incidents', filter: n => n.type.includes('incident') },
   ];
 

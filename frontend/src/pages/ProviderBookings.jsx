@@ -300,6 +300,9 @@ export default function ProviderBookings({ navigate }) {
                           <div className="pb2-bk-avatar">{b.seekerId?.name?.charAt(0) || 'S'}</div>
                           <div className="pb2-bk-info">
                             <div className="pb2-bk-name">{b.seekerId?.name || 'Seeker'}</div>
+                              <div style={{ fontSize: 12, color: '#aaa' }}>
+                                    💺 {b.seats || 1} seat{(b.seats || 1) > 1 ? 's' : ''}
+                               </div>
                             {b.seekerId?.college && (
                               <div className="pb2-bk-college">{b.seekerId.college}</div>
                             )}

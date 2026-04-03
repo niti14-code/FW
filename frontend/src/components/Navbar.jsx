@@ -40,14 +40,30 @@ export default function Navbar({ navigate, currentPage }) {
 
   const links = [
     { key: 'dashboard',          label: 'Home',            icon: '⊞', show: true },
+    { key: 'admin', label: 'Admin Dashboard', icon: '🛠️', show: isAdmin },
     { key: 'search-rides',       label: 'Find a Ride',     icon: '🔍', show: isSeeker },
     { key: 'create-ride',        label: 'Offer Ride',      icon: '＋', show: isProvider },
     { key: 'my-bookings',        label: 'My Bookings',     icon: '📋', show: isSeeker },
     { key: 'provider-bookings',  label: 'Manage Requests', icon: '📬', show: isProvider },
-    { key: 'route-alerts',       label: 'Route Alerts',    icon: '🔔', show: true },
-    { key: 'incident-report',    label: 'Incidents',       icon: '⚠️', show: true },
+    { key: 'notifications', label: 'Notifications', icon: '🔔', show: true }, 
+    //{ key: 'route-alerts',       label: 'Route Alerts',    icon: '🔔', show: true },
+    { key: 'incident-report',    label: 'Incidents',       icon: '⚠️', show: isProvider || isSeeker },
     { key: 'admin-settings',     label: 'Admin Settings',  icon: '⚙️', show: isAdmin },
   ].filter(l => l.show);
+
+  /*const links = [
+  { key: 'dashboard', label: 'Home', icon: '⊞', show: true },
+  { key: 'search-rides', label: 'Find a Ride', icon: '🔍', show: isSeeker },
+  { key: 'create-ride', label: 'Offer Ride', icon: '＋', show: isProvider },
+  { key: 'my-bookings', label: 'My Bookings', icon: '📋', show: isSeeker },
+  { key: 'provider-bookings', label: 'Manage Requests', icon: '📬', show: isProvider },
+
+  { key: 'notifications', label: 'Notifications', icon: '🔔', show: true },  // ✅ ADD THIS
+
+  { key: 'route-alerts', label: 'Route Alerts', icon: '🔔', show: true },
+  { key: 'incident-report', label: 'Incidents', icon: '⚠️', show: true },
+  { key: 'admin-settings', label: 'Admin Settings', icon: '⚙️', show: isAdmin },
+];*/
 
   useEffect(() => {
     const handler = (e) => {
