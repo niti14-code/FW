@@ -9,7 +9,8 @@ const register = async (req, res) => {
     const {
       name, email, password, phone, role, college,
       aadhar, drivingLicense, collegeIdCard,
-      emergencyContact,adminKey
+      vehiclePhoto, vehicleNumber,
+      emergencyContact, adminKey
     } = req.body;
 
     // 🔐 ADMIN KEY VALIDATION
@@ -89,10 +90,12 @@ if (role === 'admin') {
       college: role === 'admin' ? undefined : college,
       kycStatus,
       kycDocuments: {
-        aadhar: aadhar || null,
+        aadhar:         aadhar         || null,
         drivingLicense: drivingLicense || null,
-        collegeIdCard: collegeIdCard || null,
-        selfie: null // Selfie not collected during registration
+        collegeIdCard:  collegeIdCard  || null,
+        selfie:         null,
+        vehiclePhoto:   vehiclePhoto   || null,
+        vehicleNumber:  vehicleNumber  ? vehicleNumber.toUpperCase() : null,
       },
       // CRITICAL: Set submission timestamp if documents provided
       kycSubmittedAt: hasKycDocs ? new Date() : undefined,
@@ -131,12 +134,19 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
+
     const user = await User.findOne({
       email: { $regex: new RegExp(`^${email}$`, 'i') }
     });
 
-    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
-    // NEW: Check if user is blocked
+    console.log('🔐 Login attempt:', email, '| User found:', !!user);
+
+    if (!user) return res.status(400).json({ message: 'No account found with this email. Please register first.' });
+
+    // Check if user is blocked
     if (user.blocked) {
       return res.status(403).json({ 
         message: `Your account has been blocked. Reason: ${user.blockReason}. Contact support for assistance.` 
@@ -144,7 +154,9 @@ const login = async (req, res) => {
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+    console.log('🔐 Password match:', isMatch);
+
+    if (!isMatch) return res.status(400).json({ message: 'Incorrect password. Please try again.' });
 
     const token = jwt.sign(
       { userId: user._id },
@@ -165,6 +177,7 @@ const login = async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('❌ Login error:', error);
     res.status(500).json({ message: error.message });
   }
 };

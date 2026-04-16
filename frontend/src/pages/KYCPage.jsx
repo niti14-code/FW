@@ -10,6 +10,9 @@ export default function KYCPage({ navigate }) {
   const [step, setStep] = useState(0);
   const [form, setForm] = useState({ aadhar: null, collegeId: null, license: null, selfie: null });
   const [preview, setPreview] = useState({ aadhar: null, collegeId: null, license: null, selfie: null });
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  //const [vehicleType, setVehicleType] = useState('');
+  const [vehicleNumberError, setVehicleNumberError] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [fetchingStatus, setFetchingStatus] = useState(true);
@@ -66,6 +69,8 @@ export default function KYCPage({ navigate }) {
         license: status.documents.drivingLicense || null,
         selfie: status.documents.selfie || null,
       });
+      if (status.documents.vehicleNumber) setVehicleNumber(status.documents.vehicleNumber);
+      if (status.documents.vehicleType) setVehicleType(status.documents.vehicleType);
       setFetchingStatus(false);
       return; // EARLY RETURN - critical!
     }
@@ -128,6 +133,19 @@ export default function KYCPage({ navigate }) {
       throw new Error('Please upload all required documents');
     }
 
+    if (isProvider && !vehicleNumber) {
+      setVehicleNumberError('Vehicle registration number is required');
+      throw new Error('Vehicle registration number is required');
+    }
+    /*if (isProvider && !vehicleType) {
+      throw new Error('Please select vehicle service type (car or bike)');
+    }*/
+    const vnRegex = /^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/;
+    if (isProvider && !vnRegex.test(vehicleNumber)) {
+      setVehicleNumberError('Invalid format — use KA01AB1234');
+      throw new Error('Invalid vehicle number format');
+    }
+
     // Check base64 size (limit to ~2MB per image to prevent 400 error)
     const checkSize = (base64String) => {
       if (!base64String) return true;
@@ -148,6 +166,8 @@ export default function KYCPage({ navigate }) {
     
     if (isProvider) {
       payload.drivingLicenseUrl = uploads.license;
+      //payload.vehicleType = vehicleType;
+      payload.vehicleNumber = vehicleNumber;
     }
 
     console.log('Submitting KYC payload:', payload); // DEBUG
@@ -163,6 +183,8 @@ export default function KYCPage({ navigate }) {
         collegeIdCard: uploads.collegeId,
         drivingLicense: uploads.license,
         selfie: uploads.selfie,
+        //vehicleType: vehicleType,
+        vehicleNumber: vehicleNumber,
       },
     });
     setSubmitted(true);
@@ -225,8 +247,6 @@ export default function KYCPage({ navigate }) {
           <StatusBadge status={kycStatus.kycStatus} />
 
           {/* Submitted documents */}
-          // In the submitted view section, update the image rendering:
-
 {kycStatus.documents && (
   <div className="kyc-submitted-docs mt-24">
     <h4 style={{ marginBottom: 16, color: 'var(--text2)', fontSize: 14, fontWeight: 600 }}>
@@ -329,6 +349,9 @@ export default function KYCPage({ navigate }) {
                 setStep(0);
                 setForm({ aadhar: null, collegeId: null, license: null, selfie: null });
                 setPreview({ aadhar: null, collegeId: null, license: null, selfie: null });
+                setVehicleNumber('');
+               // setVehicleType('');
+                setVehicleNumberError('');
               }}
             >
               Resubmit KYC
@@ -350,7 +373,7 @@ export default function KYCPage({ navigate }) {
       <h1 className="heading mb-4" style={{ fontSize: 28 }}>KYC Verification</h1>
       <p className="text-muted mb-32 text-sm">
         {isProvider
-          ? 'Complete verification with Aadhar, College ID, and Driving License to offer rides'
+          ? 'Complete verification with Aadhar, College ID, Driving License, and vehicle number to offer rides'
           : 'Complete verification with Aadhar and College ID to book rides'}
       </p>
 
@@ -380,7 +403,7 @@ export default function KYCPage({ navigate }) {
           <h3 className="heading mb-4" style={{ fontSize: 20 }}>Upload Documents</h3>
           <p className="text-muted mb-24 text-sm">
             {isProvider
-              ? 'Upload your Aadhar, College ID, and Driving License'
+              ? 'Upload your Aadhar, College ID, and Driving License, then add your vehicle number'
               : 'Upload your Aadhar and College ID'}
           </p>
 
@@ -434,11 +457,42 @@ export default function KYCPage({ navigate }) {
                 {preview.license && <div className="kyc-check">✓ Uploaded</div>}
               </div>
             )}
+
+
+            {isProvider && (
+              <div className="kyc-upload-box" style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', padding: '16px' }}>
+                <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 500, color: 'var(--text1)' }}>
+                  🔢 Vehicle Registration Number <span style={{ color: '#dc3545' }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  className="input"
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text1)', fontSize: 14 }}
+                  placeholder="e.g. KA01AB1234"
+                  value={vehicleNumber}
+                  maxLength={12}
+                  onChange={e => {
+                    const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    setVehicleNumber(val);
+                    setVehicleNumberError('');
+                  }}
+                />
+                {vehicleNumberError && (
+                  <div style={{ color: '#dc3545', fontSize: 12, marginTop: 4 }}>{vehicleNumberError}</div>
+                )}
+                <div style={{ fontSize: 11, color: 'var(--text3)', marginTop: 4 }}>
+                  Format: State code + district + series + number (e.g. KA01AB1234)
+                </div>
+              </div>
+            )}
           </div>
 
           <button
             className="btn btn-primary btn-lg btn-full mt-32"
-            disabled={!preview.aadhar || !preview.collegeId || (isProvider && !preview.license)}
+            disabled={
+              !preview.aadhar || !preview.collegeId ||
+              (isProvider && (!preview.license || !vehicleNumber))
+            }
             onClick={() => setStep(1)}
           >
             Continue
@@ -491,7 +545,9 @@ export default function KYCPage({ navigate }) {
             {[
               { label: 'Aadhar Card',    img: preview.aadhar,    required: true },
               { label: 'College ID',     img: preview.collegeId, required: true },
-              ...(isProvider ? [{ label: 'Driving License', img: preview.license, required: true }] : []),
+              ...(isProvider ? [
+                { label: 'Driving License', img: preview.license, required: true },
+              ] : []),
               { label: 'Selfie',         img: preview.selfie,    required: true },
             ].map(item => (
               <div key={item.label} className={`kyc-review-item${!item.img ? ' missing' : ''}`}>
@@ -505,6 +561,11 @@ export default function KYCPage({ navigate }) {
             ))}
           </div>
           <div className="alert alert-info mt-24">
+            {isProvider && vehicleNumber && (
+              <div style={{ marginBottom: 6 }}>
+                Vehicle number: <strong>{vehicleNumber}</strong>
+              </div>
+            )}
             Documents will be reviewed by admin within 24 hours. Your profile will be activated upon approval.
           </div>
           <div className="flex gap-12 mt-24">

@@ -18,7 +18,6 @@ function timeAgo(dateStr) {
   return `${Math.floor(hrs / 24)} day ago`;
 }
 
-// ── Toast ─────────────────────────────────────────────────────────
 function Toast({ message, onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2200);
@@ -31,11 +30,11 @@ function Toast({ message, onDone }) {
 function PostCard({ post, currentUserId, currentUserName, onLike, onReplyAdded }) {
   const [showReply,    setShowReply]    = useState(false);
   const [replyText,    setReplyText]    = useState('');
+  const [replyAnon,    setReplyAnon]    = useState(false);
   const [submitting,   setSubmitting]   = useState(false);
   const [localReplies, setLocalReplies] = useState(post.replies || []);
   const textareaRef = useRef(null);
 
-  // Keep replies in sync when socket pushes new ones from other users
   useEffect(() => { setLocalReplies(post.replies || []); }, [post.replies]);
 
   const toggleReply = () => {
@@ -48,15 +47,16 @@ function PostCard({ post, currentUserId, currentUserName, onLike, onReplyAdded }
     if (!replyText.trim() || submitting) return;
     setSubmitting(true);
     try {
-      const saved = await addCommunityReply(post._id, replyText.trim());
-      // Optimistically show it immediately
+      const saved = await addCommunityReply(post._id, replyText.trim(), replyAnon);
+      const displayName = replyAnon ? 'Anonymous' : currentUserName;
       setLocalReplies(prev => [...prev, {
         ...saved,
-        authorName: currentUserName,
+        authorName: displayName,
         createdAt: saved.createdAt || new Date().toISOString()
       }]);
-      onReplyAdded(post._id, saved);
+      onReplyAdded(post._id, { ...saved, authorName: displayName });
       setReplyText('');
+      setReplyAnon(false);
       setShowReply(false);
     } catch (err) {
       console.error('Reply failed:', err.message);
@@ -65,48 +65,47 @@ function PostCard({ post, currentUserId, currentUserName, onLike, onReplyAdded }
     }
   };
 
-  const authorName    = post.author?.name    || 'Unknown';
+  // Anonymous post shows "Anonymous" as author, never reveals name
+  const isAnon     = post.anonymous === true;
+  const authorName = isAnon ? 'Anonymous' : (post.author?.name || 'Unknown');
   const authorCollege = post.author?.college || post.college || '';
-  const avatar        = authorName.charAt(0).toUpperCase();
+  // Avatar initial: '?' for anonymous
+  const avatar = isAnon ? '?' : authorName.charAt(0).toUpperCase();
 
   return (
     <div className="comm-post card">
       <div className="card-body">
-
-        {/* Post header */}
         <div className="post-top">
-          <div className="admin-avatar" style={{ width: 38, height: 38, fontSize: 14, flexShrink: 0 }}>
+          <div className="admin-avatar"
+            style={{ width:38, height:38, fontSize:14, flexShrink:0,
+              ...(isAnon ? { background:'var(--surface3)', color:'var(--text3)' } : {}) }}>
             {avatar}
           </div>
           <div className="post-meta flex-1">
             <div className="post-name">
-              {authorName} <span className="post-college">{authorCollege}</span>
+              {authorName}
+              {!isAnon && <span className="post-college">{authorCollege}</span>}
+              {isAnon && <span className="post-college" style={{fontStyle:'italic'}}>posted anonymously</span>}
             </div>
             <div className="post-time">{timeAgo(post.createdAt)}</div>
           </div>
           <div className="post-type-tag"
-            style={{ background: TYPE_COLOR[post.type] + '22', color: TYPE_COLOR[post.type] }}>
+            style={{ background: TYPE_COLOR[post.type]+'22', color: TYPE_COLOR[post.type] }}>
             {TYPE_LABEL[post.type]}
           </div>
         </div>
 
-        {/* Post body */}
         <p className="post-body mt-12">{post.content}</p>
 
-        {/* Action row */}
+        {/* Like + Reply only — Share removed */}
         <div className="post-foot mt-12">
           <button
             className={'like-pill' + (post._liked ? ' liked' : '')}
             onClick={() => onLike(post._id)}>
             {post._liked ? 'Liked' : 'Like'} {post.likes}
           </button>
-
           <button className="action-pill" onClick={toggleReply}>
             {showReply ? 'Cancel' : `Reply${localReplies.length ? ` (${localReplies.length})` : ''}`}
-          </button>
-
-          <button className="action-pill" onClick={() => post._onShare()}>
-            Share
           </button>
         </div>
 
@@ -116,10 +115,12 @@ function PostCard({ post, currentUserId, currentUserName, onLike, onReplyAdded }
             {localReplies.map((r, i) => (
               <div key={r._id || i} className="reply-row">
                 <div className="reply-ava">
-                  {(r.authorName || 'U').charAt(0).toUpperCase()}
+                  {r.anonymous ? '?' : (r.authorName || 'U').charAt(0).toUpperCase()}
                 </div>
                 <div className="reply-body">
-                  <span className="reply-author">{r.authorName || 'User'}</span>
+                  <span className="reply-author">
+                    {r.anonymous ? 'Anonymous' : (r.authorName || 'User')}
+                  </span>
                   <span className="reply-text">{r.content}</span>
                   <span className="reply-time">{timeAgo(r.createdAt)}</span>
                 </div>
@@ -128,7 +129,7 @@ function PostCard({ post, currentUserId, currentUserName, onLike, onReplyAdded }
           </div>
         )}
 
-        {/* Reply input */}
+        {/* Reply input with anonymous toggle */}
         {showReply && (
           <div className="reply-input-wrap mt-12">
             <textarea
@@ -142,12 +143,22 @@ function PostCard({ post, currentUserId, currentUserName, onLike, onReplyAdded }
                 if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submitReply();
               }}
             />
+            {/* Anonymous toggle */}
+            <label style={{
+              display:'flex', alignItems:'center', gap:8, marginTop:10,
+              fontSize:13, color:'var(--text2)', cursor:'pointer', userSelect:'none'
+            }}>
+              <input type="checkbox" checked={replyAnon}
+                onChange={e => setReplyAnon(e.target.checked)}
+                style={{accentColor:'var(--accent)', width:15, height:15}} />
+              Reply anonymously
+            </label>
             <div className="reply-actions mt-8">
               <button
                 className={`btn btn-primary btn-sm ${submitting ? 'btn-loading' : ''}`}
                 disabled={!replyText.trim() || submitting}
                 onClick={submitReply}>
-                {!submitting && 'Post reply'}
+                {!submitting && (replyAnon ? 'Reply as Anonymous' : 'Post reply')}
               </button>
               <button className="btn btn-ghost btn-sm" onClick={() => setShowReply(false)}>
                 Cancel
@@ -155,7 +166,6 @@ function PostCard({ post, currentUserId, currentUserName, onLike, onReplyAdded }
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
@@ -172,13 +182,13 @@ export default function CommunityPage({ navigate }) {
   const [showForm,   setShowForm]   = useState(false);
   const [filter,     setFilter]     = useState('all');
   const [form,       setForm]       = useState({ content: '', type: 'tip' });
+  const [anonymous,  setAnonymous]  = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [toast,      setToast]      = useState('');
   const socketRef = useRef(null);
 
-  const showToast = useCallback((msg) => { setToast(msg); }, []);
+  const showToast = useCallback((msg) => setToast(msg), []);
 
-  // Merge liked state into each post object for convenience
   const withLiked = useCallback((rawPosts) =>
     rawPosts.map(p => ({
       ...p,
@@ -188,7 +198,7 @@ export default function CommunityPage({ navigate }) {
     }))
   , [user?._id]);
 
-  // Fetch posts on mount
+  // Fetch posts
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -199,19 +209,30 @@ export default function CommunityPage({ navigate }) {
     return () => { cancelled = true; };
   }, []); // eslint-disable-line
 
-  // Socket: real-time new posts + new replies from other users
+  // Socket — same-college room only
   useEffect(() => {
     if (!user?._id || !userCollege) return;
+
     const socket = io(API_BASE.replace(/\/api\/?$/, ''), {
       transports: ['websocket', 'polling'], withCredentials: true
     });
     socketRef.current = socket;
 
     socket.on('connect', () => {
+      // Server validates college from DB — client just sends userId
       socket.emit('join-college-chat', { userId: user._id });
     });
 
+    socket.on('college-chat-error', (err) => {
+      console.warn('College chat error:', err.message);
+    });
+
     socket.on('new-community-post', (post) => {
+      // Extra client-side guard: only show if same college
+      const postCollege = post.college?.trim().toLowerCase();
+      const myCollege   = userCollege.trim().toLowerCase();
+      if (postCollege && postCollege !== myCollege) return;
+
       setPosts(prev => {
         if (prev.some(p => p._id === post._id)) return prev;
         return [{ ...post, _liked: false }, ...prev];
@@ -234,9 +255,14 @@ export default function CommunityPage({ navigate }) {
     if (!form.content.trim() || submitting) return;
     setSubmitting(true);
     try {
-      const newPost = await createCommunityPost({ content: form.content, type: form.type });
+      const newPost = await createCommunityPost({
+        content:   form.content,
+        type:      form.type,
+        anonymous: anonymous,
+      });
       setPosts(prev => [{ ...newPost, _liked: false, replies: [] }, ...prev]);
       setForm({ content: '', type: 'tip' });
+      setAnonymous(false);
       setShowForm(false);
       setError('');
     } catch (err) {
@@ -256,7 +282,6 @@ export default function CommunityPage({ navigate }) {
     try {
       await toggleCommunityLike(postId);
     } catch {
-      // Roll back
       setPosts(prev => prev.map(p =>
         p._id === postId
           ? { ...p, _liked: !p._liked, likes: p.likes + (p._liked ? -1 : 1) }
@@ -265,7 +290,6 @@ export default function CommunityPage({ navigate }) {
     }
   };
 
-  // Callback from PostCard when a reply is saved — keep parent state in sync
   const handleReplyAdded = useCallback((postId, reply) => {
     setPosts(prev => prev.map(p =>
       p._id === postId
@@ -273,25 +297,6 @@ export default function CommunityPage({ navigate }) {
         : p
     ));
   }, []);
-
-  // Share: copy link to clipboard
-  const handleShare = useCallback((postId) => {
-    const url = `${window.location.origin}?page=community&post=${postId}`;
-    navigator.clipboard.writeText(url)
-      .then(() => showToast('Link copied to clipboard!'))
-      .catch(() => {
-        // Fallback for browsers without clipboard API
-        const el = document.createElement('textarea');
-        el.value = url;
-        el.style.position = 'fixed';
-        el.style.opacity  = '0';
-        document.body.appendChild(el);
-        el.select();
-        document.execCommand('copy');
-        document.body.removeChild(el);
-        showToast('Link copied to clipboard!');
-      });
-  }, [showToast]);
 
   const filtered = filter === 'all' ? posts : posts.filter(p => p.type === filter);
 
@@ -301,7 +306,7 @@ export default function CommunityPage({ navigate }) {
       <h1 className="heading mb-4" style={{ fontSize: 28 }}>Community Hub</h1>
       <p className="text-muted mb-32 text-sm">
         {userCollege
-          ? <>{`Showing posts from `}<strong>{userCollege}</strong>{` only`}</>
+          ? <>{`Posts from `}<strong>{userCollege}</strong>{` students only`}</>
           : 'Share tips, landmarks, and alerts with fellow campus commuters'}
       </p>
 
@@ -324,7 +329,8 @@ export default function CommunityPage({ navigate }) {
 
       {showForm && (
         <div className="comm-form mb-24">
-          <h3 className="heading mb-16" style={{ fontSize: 16 }}>Share with the community</h3>
+          <h3 className="heading mb-16" style={{ fontSize: 16 }}>Share with your college</h3>
+
           <div className="field mb-16">
             <label>Post Type</label>
             <div className="type-pills">
@@ -332,7 +338,7 @@ export default function CommunityPage({ navigate }) {
                 <button key={t} type="button"
                   className={'type-pill' + (form.type === t ? ' active' : '')}
                   style={form.type === t
-                    ? { borderColor: TYPE_COLOR[t], background: TYPE_COLOR[t] + '22', color: TYPE_COLOR[t] }
+                    ? { borderColor: TYPE_COLOR[t], background: TYPE_COLOR[t]+'22', color: TYPE_COLOR[t] }
                     : {}}
                   onClick={() => setForm(f => ({ ...f, type: t }))}>
                   {TYPE_LABEL[t]}
@@ -340,6 +346,7 @@ export default function CommunityPage({ navigate }) {
               ))}
             </div>
           </div>
+
           <div className="field">
             <label>Your Message</label>
             <textarea className="input" rows={3}
@@ -347,11 +354,28 @@ export default function CommunityPage({ navigate }) {
               value={form.content}
               onChange={e => setForm(f => ({ ...f, content: e.target.value }))} />
           </div>
+
+          {/* Anonymous toggle */}
+          <label style={{
+            display:'flex', alignItems:'center', gap:10, marginTop:14,
+            fontSize:13, color:'var(--text2)', cursor:'pointer', userSelect:'none'
+          }}>
+            <input type="checkbox" checked={anonymous}
+              onChange={e => setAnonymous(e.target.checked)}
+              style={{accentColor:'var(--accent)', width:15, height:15}} />
+            <span>
+              Post anonymously
+              <span style={{color:'var(--text3)', marginLeft:6}}>
+                — your name won't be shown
+              </span>
+            </span>
+          </label>
+
           <button
             className={`btn btn-primary mt-16 ${submitting ? 'btn-loading' : ''}`}
             disabled={!form.content.trim() || submitting}
             onClick={handlePost}>
-            {!submitting && 'Post to Community'}
+            {!submitting && (anonymous ? 'Post Anonymously' : 'Post to Community')}
           </button>
         </div>
       )}
@@ -366,7 +390,7 @@ export default function CommunityPage({ navigate }) {
         {!loading && filtered.map(post => (
           <PostCard
             key={post._id}
-            post={{ ...post, _onShare: () => handleShare(post._id) }}
+            post={post}
             currentUserId={user?._id}
             currentUserName={user?.name || 'You'}
             onLike={handleLike}

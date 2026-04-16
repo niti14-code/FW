@@ -9,7 +9,7 @@ const communityPostSchema = new mongoose.Schema({
   college: {
     type: String,
     required: true,
-    index: true          // fast filtering by college
+    index: true
   },
   type: {
     type: String,
@@ -20,6 +20,10 @@ const communityPostSchema = new mongoose.Schema({
     type: String,
     required: true,
     maxlength: 500
+  },
+  anonymous: {
+    type: Boolean,
+    default: false
   },
   likes: {
     type: Number,
@@ -32,6 +36,7 @@ const communityPostSchema = new mongoose.Schema({
   replies: [{
     author:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     authorName:{ type: String },
+    anonymous: { type: Boolean, default: false },
     content:   { type: String, required: true, maxlength: 300 },
     createdAt: { type: Date, default: Date.now }
   }]

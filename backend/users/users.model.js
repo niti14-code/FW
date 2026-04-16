@@ -45,7 +45,14 @@ const userSchema = new mongoose.Schema({
     aadhar: String,
     drivingLicense: String,
     collegeIdCard: String,
-    selfie: String
+    selfie: String,
+    vehiclePhoto: String,
+    /*vehicleType: {
+      type: String,
+      enum: ['car', 'bike', null],
+      default: null
+    },*/
+    vehicleNumber: String,
   },
   kycSubmittedAt: { type: Date },
   kycVerifiedAt: { type: Date },

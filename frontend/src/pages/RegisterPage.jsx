@@ -18,12 +18,17 @@ export default function RegisterPage({ navigate }) {
   const [showPass,  setShowPass]= useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmPass, setConfirmPass] = useState('');
-  const [kycDocs,     setKycDocs]     = useState({ aadhar: null, license: null, collegeId: null });
+  const [kycDocs,   setKycDocs] = useState({ aadhar: null, license: null, collegeId: null });
+  const [vehicleNumber, setVehicleNumber] = useState('');
+  //const [vehicleType, setVehicleType] = useState('');
+  const [vehicleNumberError, setVehicleNumberError] = useState('');
   const [emergencyContact, setEmergency] = useState('');
   const [role, setRole] = useState('');
-const [adminKey, setAdminKey] = useState('');
+  const [adminKey, setAdminKey] = useState('');
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
+
+  const isProvider = form.role === 'provider' || form.role === 'both';
 
   // Live email-domain validation (only for non-admin roles)
   const emailValidation = useMemo(() => {
@@ -54,6 +59,15 @@ const [adminKey, setAdminKey] = useState('');
     if (form.role === 'admin' && adminKey !== 'freewheel') {
       return 'Invalid admin key';
     }
+    /*if (isProvider && !vehicleType) {
+      return 'Select vehicle service type (car or bike)';
+    }*/
+    if (isProvider && vehicleNumber) {
+      const vnRegex = /^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/;
+      if (!vnRegex.test(vehicleNumber.toUpperCase())) {
+        return 'Enter a valid vehicle number (e.g. KA01AB1234)';
+      }
+    }
     return null;
   };
 
@@ -68,10 +82,11 @@ const [adminKey, setAdminKey] = useState('');
         ...form,
         adminKey,
         emergencyContact,
-        // Pass filenames so backend stores them in kycDocuments
-        aadhar:         kycDocs.aadhar    ? kycDocs.aadhar.name    : '',
-        drivingLicense: kycDocs.license   ? kycDocs.license.name   : '',
-        collegeIdCard:  kycDocs.collegeId ? kycDocs.collegeId.name : '',
+        //vehicleType:    isProvider ? vehicleType : '',
+        aadhar:         kycDocs.aadhar       ? kycDocs.aadhar.name       : '',
+        drivingLicense: kycDocs.license      ? kycDocs.license.name      : '',
+        collegeIdCard:  kycDocs.collegeId    ? kycDocs.collegeId.name    : '',
+        vehicleNumber:  vehicleNumber        ? vehicleNumber.toUpperCase() : '',
       });
       navigate('dashboard');
     } catch (err) {
@@ -134,11 +149,9 @@ const [adminKey, setAdminKey] = useState('');
             <label>College Email</label>
             <input className="input" type="email" placeholder="you@college.edu"
               value={form.email} onChange={set('email')} />
-            {/* Domain hint — shown when college is filled but email is still empty */}
             {domainHint && !form.email && (
               <p className="field-hint-msg">💡 {domainHint}</p>
             )}
-            {/* Live domain validation feedback */}
             {form.email && form.role !== 'admin' && form.college && (
               emailValidation.valid
                 ? <p className="field-success-msg">✓ Valid college email</p>
@@ -178,24 +191,24 @@ const [adminKey, setAdminKey] = useState('');
             </div>
           </div>
 
-          {/* ADMIN KEY (ONLY FOR ADMIN) */}
-{form.role === 'admin' && (
-  <div className="field">
-    <label>Admin Key</label>
-    <div className="input-wrap">
-      <span className="input-icon">🔑</span>
-      <input
-        className="input"
-        type="password"
-        placeholder="Enter admin key"
-        value={adminKey}
-        onChange={(e) => setAdminKey(e.target.value)}
-      />
-    </div>
-  </div>
-)}
+          {/* Admin key */}
+          {form.role === 'admin' && (
+            <div className="field">
+              <label>Admin Key</label>
+              <div className="input-wrap">
+                <span className="input-icon">🔑</span>
+                <input
+                  className="input"
+                  type="password"
+                  placeholder="Enter admin key"
+                  value={adminKey}
+                  onChange={(e) => setAdminKey(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
-          {/* Password with show/hide */}
+          {/* Password */}
           <div className="field">
             <label>Password</label>
             <div className="input-wrap">
@@ -239,32 +252,74 @@ const [adminKey, setAdminKey] = useState('');
             )}
           </div>
 
-          {/* KYC Documents — hidden for admin role */}
+          {/* KYC Documents — hidden for admin */}
           {form.role !== 'admin' && (
             <div className="kyc-docs-section">
               <div className="kyc-docs-header">
                 <span className="kyc-docs-icon">📋</span>
                 <div>
                   <div className="kyc-docs-title">KYC Documents Required</div>
-                  <div className="kyc-docs-sub">Upload for identity verification — reviewed within 24 hrs</div>
+                  <div className="kyc-docs-sub">
+                    {isProvider
+                      ? 'Upload Aadhar, College ID, Driving License, and your vehicle number'
+                      : 'Upload Aadhar and College ID for identity verification'}
+                  </div>
                 </div>
                 <span className="badge badge-pending" style={{marginLeft:'auto',fontSize:11}}>Pending</span>
               </div>
+
               <div className="kyc-docs-grid">
-                {[
-                  { key:'aadhar',    label:'Aadhar Card *',    icon:'🪪' },
-                  { key:'license',   label:'Driving License *', icon:'🚗' },
-                  { key:'collegeId', label:'College ID Card *', icon:'🎓' },
-                ].map(d => (
-                  <div key={d.key} className="field">
-                    <label>{d.icon} {d.label}</label>
+
+                {/* Aadhar — all roles */}
+                <div className="field">
+                  <label>🪪 Aadhar Card *</label>
+                  <input type="file" className="input kyc-file-input" accept="image/*,.pdf"
+                    onChange={e => setKycDocs(prev => ({ ...prev, aadhar: e.target.files[0] }))} />
+                  {kycDocs.aadhar && <p className="field-success-msg">✓ {kycDocs.aadhar.name}</p>}
+                </div>
+
+                {/* College ID — all roles */}
+                <div className="field">
+                  <label>🎓 College ID Card *</label>
+                  <input type="file" className="input kyc-file-input" accept="image/*,.pdf"
+                    onChange={e => setKycDocs(prev => ({ ...prev, collegeId: e.target.files[0] }))} />
+                  {kycDocs.collegeId && <p className="field-success-msg">✓ {kycDocs.collegeId.name}</p>}
+                </div>
+
+                {/* Driving License — provider & both only */}
+                {isProvider && (
+                  <div className="field">
+                    <label>🚗 Driving License *</label>
                     <input type="file" className="input kyc-file-input" accept="image/*,.pdf"
-                      onChange={e => setKycDocs(prev => ({ ...prev, [d.key]: e.target.files[0] }))} />
-                    {kycDocs[d.key] && (
-                      <p className="field-success-msg">✓ {kycDocs[d.key].name}</p>
-                    )}
+                      onChange={e => setKycDocs(prev => ({ ...prev, license: e.target.files[0] }))} />
+                    {kycDocs.license && <p className="field-success-msg">✓ {kycDocs.license.name}</p>}
                   </div>
-                ))}
+                )}
+
+                
+
+                {isProvider && (
+                  <div className="field" style={{ gridColumn: '1 / -1' }}>
+                    <label>🔢 Vehicle Registration Number *</label>
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="e.g. KA01AB1234"
+                      maxLength={12}
+                      value={vehicleNumber}
+                      onChange={e => {
+                        const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        setVehicleNumber(val);
+                        setVehicleNumberError('');
+                      }}
+                    />
+                    {vehicleNumberError && (
+                      <p className="field-error-msg">{vehicleNumberError}</p>
+                    )}
+                    <p className="field-hint-msg">Format: State + District + Series + Number (e.g. KA01AB1234)</p>
+                  </div>
+                )}
+
               </div>
               <p className="kyc-docs-note">
                 Your account will be activated once admin approves your documents.

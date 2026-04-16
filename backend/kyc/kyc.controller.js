@@ -10,7 +10,7 @@ exports.submitKyc = async (req, res) => {
     const user = await User.findById(req.user.userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const { aadharUrl, drivingLicenseUrl, collegeIdCardUrl, selfieUrl } = req.body;
+    const { aadharUrl, drivingLicenseUrl, collegeIdCardUrl, selfieUrl, vehiclePhotoUrl, vehicleNumber } = req.body;
 
     // Enhanced validation with specific error messages
     if (!aadharUrl) {
@@ -45,12 +45,22 @@ exports.submitKyc = async (req, res) => {
       return res.status(400).json({ message: "Driving License must be a valid image" });
     }
 
+    if (isProvider && !vehicleNumber) {
+      return res.status(400).json({ message: "Vehicle registration number is required for providers" });
+    }
+    if (isProvider && vehicleNumber && !/^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$/.test(vehicleNumber.toUpperCase())) {
+      return res.status(400).json({ message: "Enter a valid vehicle number (e.g. KA01AB1234)" });
+    }
+
     // Save documents
     user.kycDocuments = {
       aadhar: aadharUrl,
       drivingLicense: isProvider ? drivingLicenseUrl : null,
       collegeIdCard: collegeIdCardUrl,
-      selfie: selfieUrl || null
+      selfie: selfieUrl || null,
+      vehiclePhoto: null,
+      //vehicleType: isProvider ? vehicleType : null,
+      vehicleNumber: isProvider ? vehicleNumber.toUpperCase() : null,
     };
 
     user.kycStatus = 'pending';
@@ -99,7 +109,7 @@ exports.getPendingKyc = async (req, res) => {
         { 'kycDocuments.aadhar': { $ne: null } },
         { 'kycDocuments.collegeIdCard': { $ne: null } }
       ]
-    }).select('name email role kycDocuments kycSubmittedAt');
+    }).select('name email role kycDocuments kycSubmittedAt vehicleNumber');
     
     res.json(pending);
   } catch (error) {
@@ -145,7 +155,7 @@ exports.getDocumentImage = async (req, res) => {
     const { userId, docType } = req.params;
 
     // Validate docType
-    const validDocTypes = ['aadhar', 'collegeIdCard', 'drivingLicense', 'selfie'];
+    const validDocTypes = ['aadhar', 'collegeIdCard', 'drivingLicense', 'selfie', 'vehiclePhoto'];
     if (!validDocTypes.includes(docType)) {
       return res.status(400).json({ message: 'Invalid document type' });
     }

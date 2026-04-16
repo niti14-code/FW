@@ -272,7 +272,7 @@ const getFallbackLocations = (query) => {
   ];
   
   // Bangalore areas and locations (comprehensive list)
- /* const bangaloreAreas = [
+  const bangaloreAreas = [
     // Major Areas
     { name: 'marathahalli', display: 'Marathahalli, Bangalore', lat: 12.9591, lng: 77.6995 },
     { name: 'marthahalli', display: 'Marathahalli, Bangalore', lat: 12.9591, lng: 77.6995 },
@@ -408,7 +408,7 @@ const getFallbackLocations = (query) => {
   found = bangaloreAreas.filter(area => 
     area.name.includes(lowerQuery) || lowerQuery.includes(area.name)
   );
-  */
+  
   // Also search in colleges
   const collegeResults = bangaloreColleges.filter(college => 
     college.name.includes(lowerQuery) || lowerQuery.includes(college.name)
@@ -630,10 +630,10 @@ export const createCommunityPost = (data) =>
 
 export const toggleCommunityLike = (postId) =>
   request(`/community/${postId}/like`, { method: 'PATCH' });
-export const addCommunityReply = (postId, content) =>
+export const addCommunityReply = (postId, content, anonymous = false) =>
   request(`/community/${postId}/reply`, {
     method: 'POST',
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ content, anonymous })
   });
 
   export const getNotifications = async () => {

@@ -35,47 +35,81 @@ const EMPTY = {
   dropLng:'', 
   date:'', 
   time:'', 
-  seatsAvailable:4, 
-  costPerSeat:'',
+  seatsAvailable:3, 
+  costPerSeat:0,
   vehicleType: 'car' // Default vehicle type
 };
 
 const VEHICLE_TYPES = [
-  { value: 'motorcycle', label: '🏍️ Motorcycle', capacity: 1 },
-  { value: 'car', label: '🚗 Car', capacity: 4 },
-  { value: 'suv', label: '🚙 SUV', capacity: 6 },
+  { value: 'motorcycle', label: '🏍 Motorcycle', capacity: 1 },
+  { value: 'car', label: '🚗 Car', capacity: 3 },
+  { value: 'suv', label: '🚙 SUV', capacity: 4 },
   { value: 'xuv', label: '🚐 XUV', capacity: 6 }
 ];
 
-// Time-based location switching logic
-const getTimeBasedLocationConfig = () => {
-  const currentHour = new Date().getHours();
+// Auto cost calculator based on vehicle fuel efficiency
+const calculateCostPerSeat = (pickupLat, pickupLng, dropLat, dropLng, vehicleType) => {
+  if (!pickupLat || !pickupLng || !dropLat || !dropLng) return 0;
   
-  // Morning to Noon (12 AM - 12 PM): Drop should be colleges, pickup should be general (no colleges)
-  if (currentHour >= 0 && currentHour < 12) {
-    return {
-      pickupIsCollege: false,
-      dropIsCollege: true,
-      dropExcludeColleges: false,
-      message: "Morning hours: Drop locations has access only for colleges"
-    };
-  }
+  // Calculate distance using Haversine formula
+  const R = 6371; // Earth's radius in km
+  const dLat = (dropLat - pickupLat) * Math.PI / 180;
+  const dLng = (dropLng - pickupLng) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(pickupLat * Math.PI / 180) * Math.cos(dropLat * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const distance = R * c;
   
-  // Afternoon to Midnight (12 PM - 12 AM): Pickup should be colleges, drop should be general (exclude colleges)
-  if (currentHour >= 12 && currentHour < 24) {
+  // Per km pricing per seat (student-friendly rates)
+  const perKmRates = {
+    motorcycle: 0,     // Bikes: only base fare, no per km charge
+    car: 3,           // Cars: ₹3 per km per seat
+    suv: 4,           // SUVs: ₹4 per km per seat
+    xuv: 5            // XUVs: ₹5 per km per seat
+  };
+  
+  // Base fares per vehicle type
+  const baseFares = {
+    motorcycle: 30,     // Bike base fare
+    car: 15,          // Car base fare
+    suv: 20,          // SUV base fare
+    xuv: 25           // XUV base fare
+  };
+  
+  const perKmRate = perKmRates[vehicleType] || perKmRates.car;
+  const baseFare = baseFares[vehicleType] || baseFares.car;
+  
+  // Calculate cost: base fare + (distance × per km rate)
+  const calculatedCost = Math.round(baseFare + (distance * perKmRate));
+  
+  // Minimum fare of ₹30 to stay competitive
+  return Math.max(calculatedCost, 30);
+};
+
+// Location config based on pickup type selection
+const getLocationConfig = (pickupType) => {
+  if (pickupType === 'college') {
     return {
       pickupIsCollege: true,
       dropIsCollege: false,
       dropExcludeColleges: true,
-      message: "Afternoon/Evening hours: Pickup locations has access only for colleges"
+      message: "College pickup: Drop locations limited to general areas"
+    };
+  } else if (pickupType === 'home') {
+    return {
+      pickupIsCollege: false,
+      dropIsCollege: true,
+      dropExcludeColleges: false,
+      message: "Home pickup: Drop locations limited to colleges"
     };
   }
   
-  // This should never be reached, but keeping for safety
+  // Default case
   return {
-    pickupIsCollege: true,
+    pickupIsCollege: false,
     dropIsCollege: false,
-    dropExcludeColleges: true,
+    dropExcludeColleges: false,
     message: ""
   };
 };
@@ -84,30 +118,23 @@ export default function CreateRide({ navigate }) {
   const { user } = useAuth();
   const [form,    setForm]    = useState(EMPTY);
   const [error,   setError]   = useState('');
-  const [success, setSuccess] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [locationConfig, setLocationConfig] = useState(getTimeBasedLocationConfig());
-
-  // Update location config every minute to reflect time changes
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [success, setSuccess] = useState(null);
+  const [pickupType, setPickupType] = useState('');
+  const [locationConfig, setLocationConfig] = useState(getLocationConfig(''));
+    // Update location config when pickup type changes
   useEffect(() => {
-    const updateConfig = () => {
-      setLocationConfig(getTimeBasedLocationConfig());
-    };
-    
-    // Update immediately and then every minute
-    updateConfig();
-    const interval = setInterval(updateConfig, 60000);
-    
-    return () => clearInterval(interval);
-  }, []);
+    setLocationConfig(getLocationConfig(pickupType));
+  }, [pickupType]);
 
   const isProvider = user?.role === 'provider' || user?.role === 'both';
   if (!isProvider) {
     return (
       <div className="narrow-wrap fade-up text-center" style={{paddingTop:80}}>
-        <div style={{fontSize:64}}>🚫</div>
-        <h2 className="heading mt-20" style={{fontSize:28}}>Access Denied</h2>
-        <p className="text-muted mt-8">Only providers can create rides. Your current role: <strong>{user?.role || 'unknown'}</strong></p>
+        <div style={{fontSize:64}}>¡Ï</div>
+        <h2 className="heading mt-20" style={{fontSize:28, marginBottom:4}}>Access Denied</h2>
+        <p className="text-muted mt-8">Only providers can create rides.</p>
         <button className="btn btn-primary btn-lg mt-32" onClick={() => navigate('dashboard')}>
           Back to Dashboard
         </button>
@@ -118,48 +145,33 @@ export default function CreateRide({ navigate }) {
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const applyPreset = (which, p) => {
-    const key = which === 'pickup';
-    setForm(f => ({
-      ...f,
-      [key ? 'pickupLabel' : 'dropLabel']: p.label,
-      [key ? 'pickupLat'   : 'dropLat']:   p.lat,
-      [key ? 'pickupLng'   : 'dropLng']:   p.lng,
-    }));
-  };
-
-  const geoLocate = (which) => {
-    if (!navigator.geolocation) { setError('Geolocation not supported'); return; }
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        const isPickup = which === 'pickup';
-        setForm(f => ({
-          ...f,
-          [isPickup ? 'pickupLabel':'dropLabel']: 'My Location',
-          [isPickup ? 'pickupLat'  :'dropLat']:   coords.latitude,
-          [isPickup ? 'pickupLng'  :'dropLng']:   coords.longitude,
-        }));
-      },
-      () => setError('Could not get location')
-    );
-  };
-
-  const validate = () => {
-    if (!form.pickupLat || !form.pickupLng) return 'Set pickup coordinates';
-    if (!form.dropLat   || !form.dropLng)   return 'Set drop coordinates';
-    if (!form.date) return 'Date is required';
-    if (!form.time) return 'Time is required';
-    if (!form.costPerSeat || Number(form.costPerSeat) <= 0) return 'Enter a valid cost per seat';
-    if (new Date(`${form.date}T${form.time}`) < new Date()) return 'Date/time must be in the future';
-    return null;
+    if (which === 'pickup') {
+      setForm(f => ({ ...f, pickupLabel: p.label, pickupLat: p.lat.toString(), pickupLng: p.lng.toString() }));
+    } else {
+      setForm(f => ({ ...f, dropLabel: p.label, dropLat: p.lat.toString(), dropLng: p.lng.toString() }));
+    }
   };
 
   const submit = async e => {
     e.preventDefault();
     setError('');
-    const v = validate();
-    if (v) { setError(v); return; }
     setLoading(true);
     try {
+      const validate = () => {
+        if (!form.pickupLat || !form.pickupLng) return 'Set pickup coordinates';
+        if (!form.dropLat   || !form.dropLng)   return 'Set drop coordinates';
+        if (!form.date) return 'Date is required';
+        if (!form.time) return 'Time is required';
+        if (new Date(`${form.date}T${form.time}`) < new Date()) return 'Date/time must be in the future';
+        if (!pickupType) return 'Please select College or Home first for better ride creation!';
+        return null;
+      };
+      const validationError = validate();
+      if (validationError) {
+        setError(validationError);
+        setLoading(false);
+        return;
+      }
       const ride = await api.createRide({
         pickup: {
           coordinates: [parseFloat(form.pickupLng), parseFloat(form.pickupLat)],
@@ -172,7 +184,13 @@ export default function CreateRide({ navigate }) {
         date: new Date(`${form.date}T${form.time}`).toISOString(),
         time: form.time,
         seatsAvailable: Number(form.seatsAvailable),
-        costPerSeat:    Number(form.costPerSeat),
+        costPerSeat: calculateCostPerSeat(
+          parseFloat(form.pickupLat),
+          parseFloat(form.pickupLng),
+          parseFloat(form.dropLat),
+          parseFloat(form.dropLng),
+          form.vehicleType
+        ),
       });
       setSuccess(ride);
     } catch (err) {
@@ -198,7 +216,14 @@ export default function CreateRide({ navigate }) {
     </div>
   );
 
-  const maxEarnings = (form.seatsAvailable * (Number(form.costPerSeat) || 0));
+  const calculatedCost = calculateCostPerSeat(
+    parseFloat(form.pickupLat),
+    parseFloat(form.pickupLng),
+    parseFloat(form.dropLat),
+    parseFloat(form.dropLng),
+    form.vehicleType
+  );
+  const maxEarnings = form.seatsAvailable * calculatedCost;
 
   return (
     <div className="narrow-wrap fade-up">
@@ -210,9 +235,32 @@ export default function CreateRide({ navigate }) {
         {error && <div className="alert alert-error mb-20">{error}</div>}
         {locationConfig.message && (
           <div className="alert alert-info mb-20">
-            🕐 {locationConfig.message}
+            ¡ {locationConfig.message}
           </div>
         )}
+
+        {/* ── Pickup Type Selection ── */}
+        <div className="field mb-32">
+          <label>Where are you picking up from? *</label>
+          <div className="pickup-type-grid">
+            <button 
+              type="button"
+              className={`pickup-type-btn ${pickupType === 'college' ? 'selected' : ''}`}
+              onClick={() => setPickupType('college')}
+            >
+              <span className="icon">🏫</span>
+              <span className="text">College</span>
+            </button>
+            <button 
+              type="button"
+              className={`pickup-type-btn ${pickupType === 'home' ? 'selected' : ''}`}
+              onClick={() => setPickupType('home')}
+            >
+              <span className="icon">🏠</span>
+              <span className="text">Home</span>
+            </button>
+          </div>
+        </div>
 
         {/* ── Pickup ── */}
         <div className="loc-section">
@@ -220,7 +268,7 @@ export default function CreateRide({ navigate }) {
             <span className="ls-dot green" /><span className="ls-label">Pickup Point</span>
           </div>
           <div className="field">
-            <label>Pickup Location ✶</label>
+            <label>Pickup Location *</label>
             {locationConfig.pickupIsCollege ? (
               <CollegeLocationSearch
                 value={form.pickupLabel}
@@ -246,7 +294,7 @@ export default function CreateRide({ navigate }) {
             <span className="ls-dot red" /><span className="ls-label">Drop Point</span>
           </div>
           <div className="field">
-            <label>Drop Location ✶</label>
+            <label>Drop Location *</label>
             {locationConfig.dropIsCollege ? (
               <CollegeLocationSearch
                 value={form.dropLabel}
@@ -282,26 +330,46 @@ export default function CreateRide({ navigate }) {
           </div>
         </div>
 
-        <div className="field mb-20">
-          <label>Cost per Seat (₹) ✶</label>
-          <input className="input" type="number" min="0" step="10" value={form.costPerSeat} onChange={set('costPerSeat')} placeholder="e.g. 50" required />
-        </div>
-
         {/* ── Vehicle Type ── */}
         <div className="field mb-20">
           <label>Vehicle Type ✶</label>
           <div className="vehicle-type-grid">
-            {VEHICLE_TYPES.map(vehicle => (
-              <div 
-                key={vehicle.value}
-                className={`vehicle-type-card ${form.vehicleType === vehicle.value ? 'selected' : ''}`}
-                onClick={() => setForm(f => ({ ...f, vehicleType: vehicle.value, seatsAvailable: vehicle.capacity }))}
-              >
-                <div className="vehicle-icon">{vehicle.label.split(' ')[0]}</div>
-                <div className="vehicle-name">{vehicle.label.split(' ')[1]}</div>
-                <div className="vehicle-capacity">Max {vehicle.capacity} seats</div>
-              </div>
-            ))}
+            {VEHICLE_TYPES.map(vehicle => {
+              const labelParts = vehicle.label.split(' ');
+              const icon = labelParts[0];
+              const name = labelParts.slice(1).join(' ');
+              
+              return (
+                <div 
+                  key={vehicle.value}
+                  className={`vehicle-type-card ${form.vehicleType === vehicle.value ? 'selected' : ''}`}
+                  onClick={() => setForm(f => ({ ...f, vehicleType: vehicle.value, seatsAvailable: vehicle.capacity }))}
+                >
+                  <div className="vehicle-icon">{icon}</div>
+                  <div className="vehicle-name">{name}</div>
+                  <div className="vehicle-capacity">Max {vehicle.capacity} seats</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ── Auto Calculated Cost ── */}
+        <div className="field mb-20">
+          <label>Auto-Calculated Cost per Seat (₹)</label>
+          <div className="cost-display">
+            <div className="cost-amount">₹{calculatedCost}</div>
+            <div className="cost-info">
+              {calculatedCost > 0 ? (
+                <span className="text-muted text-sm">
+                  Based on distance and vehicle type
+                </span>
+              ) : (
+                <span className="text-muted text-sm">
+                  Set pickup and drop locations to calculate cost
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -310,7 +378,7 @@ export default function CreateRide({ navigate }) {
           <div className="earn-card mb-20">
             <div>
               <div className="earn-label">Max earnings if fully booked</div>
-              <div className="earn-formula text-dim text-xs">{form.seatsAvailable} seat{form.seatsAvailable>1?'s':''} × ₹{form.costPerSeat}</div>
+              <div className="earn-formula text-dim text-xs">{form.seatsAvailable} seat{form.seatsAvailable>1?'s':''} × ₹{calculatedCost}</div>
             </div>
             <div className="earn-amount">₹{maxEarnings}</div>
           </div>

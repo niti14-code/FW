@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as api from '../services/api.js';
 import { useSocket } from '../hooks/useSocket.js';
@@ -56,6 +56,7 @@ export default function ProviderBookings({ navigate }) {
     fetchRides().finally(() => setRidesLoading(false));
   }, []);
 
+  
   useEffect(() => {
     if (notifications.length === 0) return;
     notifications.forEach(notif => {
@@ -67,6 +68,61 @@ export default function ProviderBookings({ navigate }) {
     });
     clearNotifications();
   }, [notifications, selected, clearNotifications]);
+
+  
+  // Check and update ride completion status
+  const checkAllRidesCompletion = async () => {
+    if (!myRides || myRides.length === 0) return;
+    
+    const currentTime = new Date();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Start of today
+    
+    console.log('Checking ride completion for', myRides.length, 'rides');
+    
+    for (const ride of myRides) {
+      if (ride.status === 'active' || ride.status === 'in-progress') {
+        try {
+          // Parse ride date - handle multiple formats
+          let rideDate;
+          
+          if (ride.date.includes('/')) {
+            // Format: "2024/4/15-10:30"
+            const [datePart] = ride.date.split('-');
+            const [year, month, day] = datePart.split('/').map(Number);
+            const [hours, minutes] = datePart.split(':').map(Number);
+            rideDate = new Date(year, month - 1, day, hours, minutes);
+          } else if (ride.date.includes('T')) {
+            // ISO format: "2024-04-15T10:30"
+            rideDate = new Date(ride.date);
+          } else {
+            // Try other formats
+            rideDate = new Date(ride.date);
+          }
+          
+          // Check if ride date is before today (day has passed)
+          if (rideDate < today) {
+            console.log('Auto-completing ride (day passed):', ride._id, 'Date:', rideDate.toDateString(), 'Today:', today.toDateString());
+            await api.completeRide(ride._id);
+          }
+        } catch (e) {
+          console.error('Error completing ride:', ride._id, e);
+        }
+      }
+    }
+    
+    // Refresh rides after completion
+    await fetchRides();
+  };
+
+  // Auto-check ride completion every minute
+  useEffect(() => {
+    const interval = setInterval(() => {
+      checkAllRidesCompletion();
+    }, 60000); // Check every minute
+
+    return () => clearInterval(interval);
+  }, [myRides]);
 
   const loadBookings = async (rideId) => {
     setSelected(rideId);
@@ -112,6 +168,54 @@ export default function ProviderBookings({ navigate }) {
 
   const manualRefresh = () => { if (selected) loadBookings(selected); };
 
+  // Check and update ride completion status
+  const checkRideCompletion = async () => {
+    if (!selectedRide) return;
+    
+    try {
+      // Handle different date formats
+      let rideDateTime;
+      
+      if (selectedRide.date.includes('/')) {
+        // Format: "2024/4/15-10:30"
+        const [datePart, timePart] = selectedRide.date.split('-');
+        const [year, month, day] = datePart.split('/').map(Number);
+        const [hours, minutes] = timePart.split(':').map(Number);
+        rideDateTime = new Date(year, month - 1, day, hours, minutes);
+      } else {
+        // Try ISO format or other formats
+        rideDateTime = new Date(selectedRide.date);
+      }
+      
+      const currentTime = new Date();
+      const oneHourLater = new Date(rideDateTime.getTime() + (1 * 60 * 60 * 1000)); // 1 hour after ride time
+      
+      console.log('Ride completion check:', {
+        rideDateTime: rideDateTime.toISOString(),
+        currentTime: currentTime.toISOString(),
+        oneHourLater: oneHourLater.toISOString(),
+        shouldComplete: currentTime > oneHourLater,
+        currentStatus: selectedRide.status
+      });
+      
+      if (currentTime > oneHourLater && (selectedRide.status === 'active' || selectedRide.status === 'in-progress')) {
+        // Auto-complete ride
+        await api.completeRide(selectedRide._id);
+        await fetchRides();
+        if (socket && connected) {
+          socket.emit('ride-completed', {
+            rideId: selectedRide._id,
+            completedAt: currentTime
+          });
+        }
+        // Show notification
+        alert('🎉 Ride automatically completed! All bookings have been marked as completed.');
+      }
+    } catch (e) {
+      console.error('Error checking ride completion:', e);
+    }
+  };
+
   const pending  = bookings.filter(b => b.status === 'pending');
   const resolved = bookings.filter(b => b.status !== 'pending');
 
@@ -121,6 +225,13 @@ export default function ProviderBookings({ navigate }) {
     completed: '#6366f1',
     'in-progress': '#f59e0b'
   }[s] || '#888');
+
+const rideStatusBadge = (s) => ({
+    active: { bg: '#dcfce7', text: '#166534' },
+    cancelled: { bg: '#fee2e2', text: '#ffffff' },
+    completed: { bg: '#e0e7ff', text: '#3730a3' },
+    'in-progress': { bg: '#fef3c7', text: '#f59e0b' }
+  }[s] || { bg: '#f3f4f6', text: '#94a3b8' });
 
   return (
     <div className="page-wrap fade-up">
@@ -190,7 +301,12 @@ export default function ProviderBookings({ navigate }) {
                     >
                       <div className="pb2-ride-top">
                         <span className="pb2-ride-date">{dateStr} · {r.time}</span>
-                        <span className="pb2-status-dot" style={{background: rideStatusColor(r.status)}} />
+                        <span className="pb2-status-badge" style={{
+                          background: rideStatusBadge(r.status).bg,
+                          color: rideStatusBadge(r.status).text
+                        }}>
+                          {rideStatusBadge(r.status).icon}
+                        </span>
                       </div>
                       <div className="pb2-ride-route">
   <div className="pb2-route-line">
@@ -226,6 +342,25 @@ export default function ProviderBookings({ navigate }) {
                   ride={selectedRide}
                   onUpdate={() => { fetchRides(); if (selected) loadBookings(selected); }}
                 />
+                
+                {/* Manual Completion Button */}
+                {(selectedRide.status === 'active' || selectedRide.status === 'in-progress') && (
+                  <div className="mt-16">
+                    <button 
+                      className="btn btn-success btn-lg"
+                      onClick={checkRideCompletion}
+                      style={{width: '100%'}}
+                    >
+                      ✅ Mark Ride as Completed
+                    </button>
+                    <div className="text-muted text-xs mt-8" style={{textAlign: 'center'}}>
+                      Or wait 5 minutes after ride time for auto-completion
+                    </div>
+                    <div className="text-muted text-xs mt-4" style={{textAlign: 'center'}}>
+                      Status: {selectedRide.status}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -301,7 +436,7 @@ export default function ProviderBookings({ navigate }) {
                           <div className="pb2-bk-info">
                             <div className="pb2-bk-name">{b.seekerId?.name || 'Seeker'}</div>
                               <div style={{ fontSize: 12, color: '#aaa' }}>
-                                    💺 {b.seats || 1} seat{(b.seats || 1) > 1 ? 's' : ''}
+                                    {b.seats || 1} seat{(b.seats || 1) > 1 ? 's' : ''}
                                </div>
                             {b.seekerId?.college && (
                               <div className="pb2-bk-college">{b.seekerId.college}</div>
@@ -363,6 +498,24 @@ export default function ProviderBookings({ navigate }) {
                           </div>
                           <div className="pb2-bk-info">
                             <div className="pb2-bk-name">{b.seekerId?.name || 'Seeker'}</div>
+                            <div className="pb2-bk-seats">
+                              <div className="pb2-bk-seats-icon"></div>
+                              <div className="pb2-bk-seats-info">
+                                <div className="pb2-bk-seats-count">💺{b.seats || 1}</div>
+                              </div>
+                            </div>
+                            {b.seekerId?.phone && (
+                              <div className="pb2-bk-contact">
+                                <div className="pb2-bk-contact-icon"></div>
+                                <div className="pb2-bk-contact-text">📞{b.seekerId.phone}</div>
+                              </div>
+                            )}
+                            {b.seekerId?.email && (
+                              <div className="pb2-bk-contact">
+                                <div className="pb2-bk-contact-icon">📧</div>
+                                <div className="pb2-bk-contact-text">{b.seekerId.email}</div>
+                              </div>
+                            )}
                             {b.seekerId?.college && (
                               <div className="pb2-bk-college">{b.seekerId.college}</div>
                             )}

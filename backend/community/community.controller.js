@@ -16,7 +16,21 @@ const getPosts = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(100);
 
-    res.json(posts);
+    // For anonymous posts, strip the author name before sending
+    const sanitized = posts.map(p => {
+      const obj = p.toObject();
+      if (obj.anonymous) {
+        obj.author = null;  // hide author identity
+      }
+      // Sanitize anonymous replies too
+      obj.replies = obj.replies.map(r => ({
+        ...r,
+        authorName: r.anonymous ? 'Anonymous' : r.authorName
+      }));
+      return obj;
+    });
+
+    res.json(sanitized);
   } catch (err) {
     console.error('getPosts error:', err.message);
     res.status(500).json({ message: err.message });
@@ -26,43 +40,44 @@ const getPosts = async (req, res) => {
 // ── CREATE a new post ─────────────────────────────────────────────
 const createPost = async (req, res) => {
   try {
-    const { content, type } = req.body;
+    const { content, type, anonymous } = req.body;
 
     const user = await User.findById(req.user.userId).select('name college');
     if (!user || !user.college) {
       return res.status(400).json({ message: 'College not found for this user' });
     }
-
     if (!content || !content.trim()) {
       return res.status(400).json({ message: 'Content is required' });
     }
 
     const post = await CommunityPost.create({
-      author:  req.user.userId,
-      college: user.college,
-      type:    type || 'tip',
-      content: content.trim()
+      author:    req.user.userId,
+      college:   user.college,
+      type:      type || 'tip',
+      content:   content.trim(),
+      anonymous: !!anonymous
     });
 
-    // Populate for the response and for the socket broadcast
     const populated = await CommunityPost.findById(post._id).populate('author', 'name college');
+    const obj = populated.toObject();
 
-    // Broadcast to all sockets in the same college room
+    // Strip author identity if anonymous before broadcasting
+    const payload = obj.anonymous ? { ...obj, author: null } : obj;
+
     const io = req.app.get('io');
     if (io) {
       const collegeRoom = `college-${user.college.trim().toLowerCase().replace(/\s+/g, '-')}`;
-      io.to(collegeRoom).emit('new-community-post', populated);
-      console.log(`📢 Broadcast new post to room: ${collegeRoom}`);
+      io.to(collegeRoom).emit('new-community-post', payload);
     }
 
-    res.status(201).json(populated);
+    res.status(201).json(payload);
   } catch (err) {
     console.error('createPost error:', err.message);
     res.status(500).json({ message: err.message });
   }
 };
 
-// ── TOGGLE like on a post ─────────────────────────────────────────
+// ── TOGGLE like ───────────────────────────────────────────────────
 const toggleLike = async (req, res) => {
   try {
     const post = await CommunityPost.findById(req.params.id);
@@ -78,7 +93,6 @@ const toggleLike = async (req, res) => {
       post.likedBy.push(userId);
       post.likes += 1;
     }
-
     await post.save();
     res.json({ likes: post.likes, liked: !alreadyLiked });
   } catch (err) {
@@ -87,10 +101,10 @@ const toggleLike = async (req, res) => {
   }
 };
 
-// ── ADD a reply to a post ─────────────────────────────────────────
+// ── ADD a reply ───────────────────────────────────────────────────
 const addReply = async (req, res) => {
   try {
-    const { content } = req.body;
+    const { content, anonymous } = req.body;
     if (!content || !content.trim()) {
       return res.status(400).json({ message: 'Reply content is required' });
     }
@@ -101,13 +115,31 @@ const addReply = async (req, res) => {
     const post = await CommunityPost.findById(req.params.id);
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
-    const reply = { author: req.user.userId, authorName: user.name, content: content.trim() };
+    // Enforce same-college for replies
+    if (user.college?.trim().toLowerCase() !== post.college?.trim().toLowerCase()) {
+      return res.status(403).json({ message: 'You can only reply to posts from your college' });
+    }
+
+    const reply = {
+      author:     req.user.userId,
+      authorName: !!anonymous ? 'Anonymous' : user.name,
+      anonymous:  !!anonymous,
+      content:    content.trim(),
+      createdAt:  new Date()
+    };
+
     post.replies.push(reply);
     await post.save();
 
-    // Return the newly added reply (last item)
-    const savedReply = post.replies[post.replies.length - 1];
-    res.status(201).json(savedReply);
+    const saved = post.replies[post.replies.length - 1];
+
+    const io = req.app.get('io');
+    if (io) {
+      const collegeRoom = `college-${post.college.trim().toLowerCase().replace(/\s+/g, '-')}`;
+      io.to(collegeRoom).emit('new-community-reply', { postId: post._id, reply: saved });
+    }
+
+    res.status(201).json(saved);
   } catch (err) {
     console.error('addReply error:', err.message);
     res.status(500).json({ message: err.message });

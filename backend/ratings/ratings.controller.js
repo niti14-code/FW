@@ -1,10 +1,15 @@
 const Rating = require('./ratings.model');
 const User = require('../users/users.model');
+const Notification = require('../notifications/notifications.model');
 
 exports.addRating = async (req, res) => {
   try {
     const { rideId, reviewedUser, rating, comment } = req.body;
     const reviewer = req.user.userId;
+    if (!rideId) {
+      return res.status(400).json({ message: 'rideId is required to submit a ride rating' });
+    }
+
 
     console.log('📥 addRating called:', { reviewer, reviewedUser, rating, rideId });
 
@@ -22,12 +27,10 @@ exports.addRating = async (req, res) => {
       return res.status(400).json({ message: 'Rating must be between 1 and 5' });
     }
 
-    // Prevent duplicate rating for the same ride by the same reviewer (only when rideId is given)
-    if (rideId) {
-      const existing = await Rating.findOne({ rideId, reviewer });
-      if (existing) {
-        return res.status(409).json({ message: 'You have already rated this ride' });
-      }
+    // Prevent duplicate rating for the same ride by the same reviewer
+    const existing = await Rating.findOne({ rideId, reviewer });
+    if (existing) {
+      return res.status(409).json({ message: 'You have already rated this ride' });
     }
 
     const newRating = new Rating({
@@ -57,6 +60,27 @@ exports.addRating = async (req, res) => {
 
     const populated = await Rating.findById(newRating._id).populate('reviewer', 'name');
 
+    // Notify provider/reviewed user about new rating
+    try {
+      await Notification.create({
+        userId: reviewedUser,
+        userType: 'provider',
+        type: 'rating_received',
+        title: '⭐ New rating received',
+        body: `${populated?.reviewer?.name || 'A user'} rated your ride ${rating}/5.`,
+        data: {
+          rideId,
+          ratingId: populated?._id,
+          rating,
+          reviewerId: reviewer,
+        },
+        channels: ['in_app'],
+        priority: 'normal',
+      });
+    } catch (notifErr) {
+      console.error('⚠ Failed to create rating notification:', notifErr.message);
+    }
+
     res.status(201).json({
       message: 'Rating added successfully',
       rating: populated,
@@ -71,7 +95,7 @@ exports.addRating = async (req, res) => {
 exports.getUserRatings = async (req, res) => {
   try {
     const ratings = await Rating.find({ reviewedUser: req.params.userId })
-      .populate('reviewer', 'name college')     // include college for display
+      .populate('reviewer', 'name college')
       .populate('reviewedUser', 'name')
       .sort({ createdAt: -1 });
 
@@ -79,6 +103,34 @@ exports.getUserRatings = async (req, res) => {
 
   } catch (error) {
     console.error('getUserRatings error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getRatingsByReviewer = async (req, res) => {
+  try {
+    const ratings = await Rating.find({ reviewer: req.params.userId })
+      .populate('reviewer', 'name college')
+      .populate('reviewedUser', 'name')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(ratings);
+  } catch (error) {
+    console.error('getRatingsByReviewer error:', error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getRideRatings = async (req, res) => {
+  try {
+    const ratings = await Rating.find({ rideId: req.params.rideId })
+      .populate('reviewer', 'name college')
+      .populate('reviewedUser', 'name')
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(ratings);
+  } catch (error) {
+    console.error('getRideRatings error:', error);
     res.status(500).json({ error: error.message });
   }
 };
