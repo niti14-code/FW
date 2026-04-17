@@ -1,6 +1,15 @@
 const User = require('../users/users.model');
 const path = require('path');
 const fs = require('fs');
+//const cloudinary = require('../config/cloudinary'); // ✅ ADDED
+
+// ✅ ADDED: helper function
+/*const uploadToCloudinary = async (base64) => {
+  const result = await cloudinary.uploader.upload(base64, {
+    folder: 'kyc_documents',
+  });
+  return result.secure_url;
+};*/
 
 // Submit KYC (Providers: aadhar + drivingLicense + collegeIdCard, Seekers: aadhar + collegeIdCard)
 exports.submitKyc = async (req, res) => {
@@ -24,6 +33,7 @@ exports.submitKyc = async (req, res) => {
     const isValidImageUrl = (url) => {
       return url && (
         url.startsWith('data:image') || 
+        url.startsWith('http') ||
         url.startsWith('http://') || 
         url.startsWith('https://')
       );
@@ -52,16 +62,22 @@ exports.submitKyc = async (req, res) => {
       return res.status(400).json({ message: "Enter a valid vehicle number (e.g. KA01AB1234)" });
     }
 
-    // Save documents
+    // ✅ NEW: Upload to Cloudinary
+    /*const uploadedAadhar = await uploadToCloudinary(aadharUrl);
+    const uploadedCollege = await uploadToCloudinary(collegeIdCardUrl);
+    const uploadedLicense = isProvider && drivingLicenseUrl ? await uploadToCloudinary(drivingLicenseUrl) : null;
+    const uploadedSelfie = selfieUrl ? await uploadToCloudinary(selfieUrl) : null;*/
+
+
+    // Save documents (NOW URLs INSTEAD OF BASE64)
     user.kycDocuments = {
-      aadhar: aadharUrl,
-      drivingLicense: isProvider ? drivingLicenseUrl : null,
-      collegeIdCard: collegeIdCardUrl,
-      selfie: selfieUrl || null,
-      vehiclePhoto: null,
-      //vehicleType: isProvider ? vehicleType : null,
-      vehicleNumber: isProvider ? vehicleNumber.toUpperCase() : null,
-    };
+  aadhar: aadharUrl,
+  drivingLicense: isProvider ? drivingLicenseUrl : null,
+  collegeIdCard: collegeIdCardUrl,
+  selfie: selfieUrl || null,
+  vehiclePhoto: null,
+  vehicleNumber: isProvider ? vehicleNumber.toUpperCase() : null,
+};
 
     user.kycStatus = 'pending';
     user.kycSubmittedAt = new Date();
@@ -88,7 +104,7 @@ exports.getKycStatus = async (req, res) => {
 
     res.json({
       role: user.role,
-      kycStatus: user.kycStatus, // 'pending', 'approved', 'rejected', 'not_submitted'
+      kycStatus: user.kycStatus,
       documents: user.kycDocuments,
       submittedAt: user.kycSubmittedAt,
       verifiedAt: user.kycVerifiedAt
@@ -102,7 +118,6 @@ exports.getKycStatus = async (req, res) => {
 // Admin: Get all pending KYCs
 exports.getPendingKyc = async (req, res) => {
   try {
-    // Only get users who have ACTUALLY submitted documents
     const pending = await User.find({ 
       kycStatus: 'pending',
       $or: [
@@ -120,7 +135,7 @@ exports.getPendingKyc = async (req, res) => {
 // Admin: Approve/Reject KYC
 exports.reviewKyc = async (req, res) => {
   try {
-    const { userId, status, remarks } = req.body; // status: 'approved' or 'rejected'
+    const { userId, status, remarks } = req.body;
 
     if (!['approved', 'rejected'].includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
@@ -154,7 +169,6 @@ exports.getDocumentImage = async (req, res) => {
   try {
     const { userId, docType } = req.params;
 
-    // Validate docType
     const validDocTypes = ['aadhar', 'collegeIdCard', 'drivingLicense', 'selfie', 'vehiclePhoto'];
     if (!validDocTypes.includes(docType)) {
       return res.status(400).json({ message: 'Invalid document type' });
@@ -167,40 +181,12 @@ exports.getDocumentImage = async (req, res) => {
 
     const fileData = user.kycDocuments[docType];
 
-    // ✅ CASE 1: BASE64 IMAGE (YOUR MAIN CASE)
-    if (fileData.startsWith('data:image')) {
-      const base64Data = fileData.split(',')[1];
-      const mimeType = fileData.match(/data:(image\/.*);base64/)[1];
-
-      const buffer = Buffer.from(base64Data, 'base64');
-
-      res.setHeader('Content-Type', mimeType);
-      return res.send(buffer);
-    }
-
-    // ✅ CASE 2: EXTERNAL URL (optional)
+    // ✅ UPDATED: only redirect (Cloudinary URL)
     if (fileData.startsWith('http://') || fileData.startsWith('https://')) {
       return res.redirect(fileData);
     }
 
-    // ❌ CASE 3: LOCAL FILE (avoid using this in production)
-    const uploadDir = process.env.UPLOAD_DIR || './uploads/kyc';
-    const filePath = path.join(uploadDir, fileData);
-
-    if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ message: 'File not found on server' });
-    }
-
-    const ext = path.extname(fileData).toLowerCase();
-    const contentType = {
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.png': 'image/png',
-      '.gif': 'image/gif'
-    }[ext] || 'application/octet-stream';
-
-    res.setHeader('Content-Type', contentType);
-    return res.sendFile(path.resolve(filePath));
+    return res.status(400).json({ message: 'Invalid file format' });
 
   } catch (error) {
     console.error('Error serving document:', error);

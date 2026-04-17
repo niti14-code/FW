@@ -645,3 +645,8 @@ export const addCommunityReply = (postId, content) =>
     return [];
   }
 };
+
+//Ratings page
+export const getRideRatings = (rideId) => request(`/ratings/ride/${rideId}`);
+export const getUserRatings = (userId) => request(`/ratings/${userId}`);
+export const getRatingsByReviewer = (userId) => request(`/ratings/reviewer/${userId}`);

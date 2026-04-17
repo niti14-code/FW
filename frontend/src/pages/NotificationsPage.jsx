@@ -19,7 +19,7 @@ const NOTIF_TYPES = {
   account_removed:   { icon: '📢', color: '#ff4444', label: 'Account'           },
   alert_match:       { icon: '🔔', color: '#f5a623', label: 'Route Alert'       },
   incident_update:   { icon: '⚠️', color: '#ff8800', label: 'Incident Update'   },
-  rating_received:   { icon: '⭐', color: '#f5a623', label: 'New Rating'        },
+
   system:            { icon: '📢', color: '#555',    label: 'System'            },
 };
 
@@ -448,7 +448,7 @@ export default function NotificationsPage({ navigate }) {
     { key: 'all',       label: 'All',       filter: () => true },
     { key: 'bookings',  label: 'Bookings',  filter: n => n.type.startsWith('booking') },
     { key: 'rides',     label: 'Rides',     filter: n => ['ride_pickup','ride_in_progress','ride_drop','ride_completed','ride_cancelled'].includes(n.type) },
-    { key: 'ratings',   label: 'Ratings',   filter: n => n.type === 'rating_received' },
+   
     { key: 'kyc',       label: 'KYC',       filter: n => n.type.startsWith('kyc') },
     { key: 'alerts',    label: 'Alerts',    filter: n => n.type === 'alert_match' },
     { key: 'incidents', label: 'Incidents', filter: n => n.type === 'incident_update' },
@@ -458,7 +458,7 @@ export default function NotificationsPage({ navigate }) {
     { key: 'all',       label: 'All',       filter: () => true },
     { key: 'requests',  label: 'Requests',  filter: n => n.type === 'booking_request' },
     { key: 'rides',     label: 'My Rides',  filter: n => ['ride_pickup','ride_in_progress','ride_drop','ride_completed','ride_cancelled'].includes(n.type) },
-    { key: 'ratings',   label: 'Ratings',   filter: n => n.type === 'rating_received' },
+   
     { key: 'kyc',       label: 'KYC',       filter: n => n.type.startsWith('kyc') },
     { key: 'incidents', label: 'Incidents', filter: n => n.type === 'incident_update' },
   ];
@@ -521,7 +521,7 @@ export default function NotificationsPage({ navigate }) {
             {tab==='bookings'  ? 'No booking activity. Search for a ride to get started.' :
              tab==='requests'  ? 'No pending booking requests for your rides.' :
              tab==='rides'     ? 'No ride updates yet.' :
-             tab==='ratings'   ? 'No ratings yet.' :
+             
              tab==='kyc'       ? 'Complete KYC to see verification status here.' :
              tab==='alerts'    ? 'Set a route alert to get notified about matching rides.' :
              tab==='incidents' ? 'No incident reports filed.' :

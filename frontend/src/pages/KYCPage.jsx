@@ -4,6 +4,8 @@ import * as api from '../services/api.js';
 import './KYCPage.css';
 
 const STEPS = ['Upload ID', 'Selfie Check', 'Review'];
+const CLOUD_NAME = "dhkui5t39";
+const UPLOAD_PRESET = "kyc_upload";
 
 export default function KYCPage({ navigate }) {
   const { user } = useAuth();
@@ -21,7 +23,7 @@ export default function KYCPage({ navigate }) {
 
   const isProvider = user?.role === 'provider' || user?.role === 'both';
 
-  const getDocUrl = (docType, filename) => {
+  /*const getDocUrl = (docType, filename) => {
   if (!filename) return null;
 
   // ✅ If base64 → use directly (THIS IS YOUR MAIN FIX)
@@ -37,8 +39,14 @@ export default function KYCPage({ navigate }) {
   // ❌ Ignore everything else (like "dsa1.jpg")
   console.warn("Invalid image format:", filename);
   return null;
-  };
+  };*/
+  const getDocUrl = (docType, url) => {
+  if (!url) return null;
 
+  if (url.startsWith('http')) return url;
+
+  return null;
+};
   // Fetch existing KYC status on load
   useEffect(() => {
     fetchKycStatus();
@@ -94,8 +102,8 @@ export default function KYCPage({ navigate }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File size must be less than 5MB');
+    if (file.size > 7 * 1024 * 1024) {
+      setError('File size must be less than 7MB');
       return;
     }
     if (!file.type.startsWith('image/')) {
@@ -110,16 +118,40 @@ export default function KYCPage({ navigate }) {
     reader.onload = ev => setPreview(p => ({ ...p, [key]: ev.target.result }));
     reader.readAsDataURL(file);
   };
+// upload to cloudinary
+  const uploadToCloudinary = async (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", UPLOAD_PRESET);
+
+  const res = await fetch(
+    `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  const data = await res.json();
+
+  if (!data.secure_url) {
+    throw new Error("Cloudinary upload failed");
+  }
+
+  return data.secure_url;
+};
 
   const uploadFiles = async () => {
-    const uploads = {};
-    for (const [key, file] of Object.entries(form)) {
-      if (file && (key !== 'license' || isProvider)) {
-        uploads[key] = preview[key]; // base64 data URL
-      }
+  const uploads = {};
+
+  for (const [key, file] of Object.entries(form)) {
+    if (file && (key !== 'license' || isProvider)) {
+      uploads[key] = await uploadToCloudinary(file); // ✅ upload to Cloudinary
     }
-    return uploads;
-  };
+  }
+
+  return uploads;
+};
 
   const handleSubmit = async () => {
   setLoading(true);
@@ -146,16 +178,15 @@ export default function KYCPage({ navigate }) {
       throw new Error('Invalid vehicle number format');
     }
 
-    // Check base64 size (limit to ~2MB per image to prevent 400 error)
+    // Check base64 size (limit to ~7MB per image to prevent 400 error)
     const checkSize = (base64String) => {
-      if (!base64String) return true;
-      // Rough estimate: base64 is ~4/3 of binary size
-      const sizeInBytes = (base64String.length * 3) / 4;
-      return sizeInBytes < 2 * 1024 * 1024; // 2MB limit
-    };
+  if (!base64String) return true;
+  const sizeInBytes = (base64String.length * 3) / 4;
+  return sizeInBytes < 7 * 1024 * 1024; // ✅ 7MB
+};
 
     if (!checkSize(uploads.aadhar) || !checkSize(uploads.collegeId) || !checkSize(uploads.license) || !checkSize(uploads.selfie)) {
-      throw new Error('One or more images exceed 2MB. Please compress and re-upload.');
+      throw new Error('One or more images exceed 7MB. Please compress and re-upload.');
     }
 
     const payload = {

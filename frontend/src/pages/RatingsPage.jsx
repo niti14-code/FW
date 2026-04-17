@@ -4,8 +4,10 @@ import React, { useState, useEffect } from 'react';
 import { 
   API_BASE, 
   getToken, 
+  getUser,
   getMyBookings, 
-  getRide 
+  getRide,
+  getRideRatings,
 } from '../services/api.js';
 
 /* ─── Inline styles (drop your RatingsPage.css import if you use this) ─── */
@@ -417,7 +419,7 @@ function formatDate(iso) {
 }
 
 /* ─── Main Component ──────────────────────────────────────────────────────── */
-export default function RatingsPage({ userId: userIdProp }) {
+export default function RatingsPage({ userId: userIdProp, preselectedRideId, bookingId: bookingIdProp, viewRideId }) {
 
   const [ratings, setRatings]       = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -434,15 +436,41 @@ export default function RatingsPage({ userId: userIdProp }) {
   const [submitting, setSubmitting]   = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [newlyAdded, setNewlyAdded]   = useState(null);
+  const [alreadyRated, setAlreadyRated] = useState(false);
+  const [checkingRating, setCheckingRating] = useState(false);
+
+  const currentUser = getUser();
+  const currentUserId = String(
+    currentUser?._id || currentUser?.id || currentUser?.userId || ''
+  );
 
   const reviewedUserId = userIdProp || selectedRide?.providerId;
   const targetUserId   = userIdProp;
 
   /* ── Fetch this profile's ratings ── */
   useEffect(() => {
-    if (!targetUserId) { setLoading(false); return; }
-    fetchRatings();
-  }, [targetUserId]);
+    if (viewRideId) {
+      // Fetch ratings for a specific ride
+      fetchRideRatings(viewRideId);
+    } else if (targetUserId) {
+      fetchRatings();
+    } else {
+      setLoading(false);
+    }
+  }, [targetUserId, viewRideId]);
+
+  /* ── Auto-open form with pre-selected ride when coming from notification ── */
+  useEffect(() => {
+    if (preselectedRideId) {
+      setShowForm(true);
+      setSubmitError('');
+      loadPastRides(preselectedRideId);
+    }
+  }, [preselectedRideId]);
+
+  useEffect(() => {
+    checkAlreadyRatedForRide();
+  }, [selectedRide?.rideId]);
 
   async function fetchRatings() {
     setLoading(true);
@@ -450,7 +478,7 @@ export default function RatingsPage({ userId: userIdProp }) {
     try {
       const token = getToken();
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch(`${API_BASE}/ratings/${targetUserId}`, { headers });
+      const res = await fetch(`${API_BASE}/api/ratings/${targetUserId}`, { headers });
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       setRatings(await res.json());
     } catch (err) {
@@ -460,20 +488,55 @@ export default function RatingsPage({ userId: userIdProp }) {
     }
   }
 
+  async function fetchRideRatings(rideId) {
+    setLoading(true);
+    setFetchError('');
+    try {
+      const data = await getRideRatings(rideId);
+      setRatings(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setFetchError('Could not load ratings for this ride.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function checkAlreadyRatedForRide() {
+    if (!selectedRide?.rideId || !currentUserId) {
+      setAlreadyRated(false);
+      return;
+    }
+    setCheckingRating(true);
+    try {
+      const rideRatings = await getRideRatings(selectedRide.rideId);
+      const hasReviewed = (Array.isArray(rideRatings) ? rideRatings : []).some(r => {
+        const reviewerId = String(r?.reviewer?._id || r?.reviewer?.id || r?.reviewer || '');
+        return reviewerId && reviewerId === currentUserId;
+      });
+      setAlreadyRated(hasReviewed);
+      if (hasReviewed) {
+        setSubmitError('You have already rated this ride');
+      } else if (submitError === 'You have already rated this ride') {
+        setSubmitError('');
+      }
+    } catch (_) {
+      setAlreadyRated(false);
+    } finally {
+      setCheckingRating(false);
+    }
+  }
+
   /* ── Fetch past completed rides when form opens ── */
-  async function loadPastRides() {
-    if (userIdProp || pastRides.length > 0) return;
+  async function loadPastRides(targetRideId = null) {
+    if (userIdProp || (pastRides.length > 0 && !targetRideId)) return;
     setRidesLoading(true);
     setRidesError('');
     try {
-      // FIXED: Use imported API function instead of raw fetch with phantom routes
       const data = await getMyBookings();
       const list = Array.isArray(data) ? data : (data.bookings || data.data || []);
       
-      // Filter out cancelled bookings
       const filtered = list.filter(b => b.status !== 'cancelled');
 
-      // Enrich with ride details if needed
       const enriched = await Promise.all(filtered.map(async (booking) => {
         const ride = booking.rideId;
         if (!ride) return booking;
@@ -495,6 +558,38 @@ export default function RatingsPage({ userId: userIdProp }) {
 
       setPastRides(enriched);
 
+      // Auto-select if targetRideId was passed (from notification)
+      if (targetRideId) {
+        const match = enriched.find(b => {
+          const ride = b.rideId;
+          const rid = typeof ride === 'object' ? (ride._id?.toString() || ride.id?.toString()) : ride?.toString();
+          return rid === targetRideId.toString() || b._id?.toString() === bookingIdProp?.toString();
+        });
+        if (match) {
+          const ride     = match.rideId;
+          const provider = ride?.providerId;
+          let provId   = '';
+          let provName = 'Unknown Provider';
+          if (provider && typeof provider === 'object') {
+            if (provider.name) provName = provider.name;
+            const rawId = provider._id || provider.id || provider;
+            provId = rawId?.toString ? rawId.toString() : String(rawId);
+          } else if (provider) {
+            provId = provider.toString ? provider.toString() : String(provider);
+          }
+          const routeLabel = [ride?.pickup?.address, ride?.drop?.address].filter(Boolean).join(' → ')
+            || [ride?.pickup?.label, ride?.drop?.label].filter(Boolean).join(' → ')
+            || 'Completed Ride';
+          setSelectedRide({
+            bookingId: match._id,
+            rideId: typeof ride === 'object' ? (ride._id || ride.id) : ride,
+            providerId: provId,
+            providerName: provName,
+            routeLabel,
+          });
+        }
+      }
+
       if (enriched.length === 0) {
         setRidesError('No past rides found. Complete a booking first to leave a review.');
       }
@@ -507,10 +602,11 @@ export default function RatingsPage({ userId: userIdProp }) {
 
   /* ── Submit ── */
   async function handleSubmit() {
-    if (!form.rating || !reviewedUserId) return;
+    if (!form.rating || !reviewedUserId || !selectedRide?.rideId) return;
 
     const token = getToken();
     const payload = {
+      rideId:       selectedRide?.rideId,
       reviewedUser: reviewedUserId,
       rating:       form.rating,
       comment:      [
@@ -537,7 +633,7 @@ export default function RatingsPage({ userId: userIdProp }) {
     setNewlyAdded(optimistic._id);
 
     try {
-      const res = await fetch(`${API_BASE}/ratings/add`, {
+      const res = await fetch(`${API_BASE}/api/ratings/add`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body:    JSON.stringify(payload),
@@ -555,6 +651,9 @@ export default function RatingsPage({ userId: userIdProp }) {
       setSelectedRide(null);
     } catch (err) {
       setSubmitError(err.message);
+      if ((err.message || '').toLowerCase().includes('already rated')) {
+        setAlreadyRated(true);
+      }
       setRatings(prev => prev.filter(r => r._id !== optimistic._id));
       setNewlyAdded(null);
     } finally {
@@ -577,10 +676,16 @@ export default function RatingsPage({ userId: userIdProp }) {
       <style>{css}</style>
       <div className="rp-wrap">
 
-        {/* Header */}
+        {/* Header — changes based on context */}
         <p className="rp-eyebrow">Community Trust</p>
-        <h1 className="rp-title">Ratings & Reviews</h1>
-        <p className="rp-sub">Verified feedback from co-passengers on shared rides</p>
+        <h1 className="rp-title">
+          {viewRideId ? 'Ride Ratings' : 'Ratings & Reviews'}
+        </h1>
+        <p className="rp-sub">
+          {viewRideId
+            ? 'Passenger feedback for this specific ride'
+            : 'Verified feedback from co-passengers on shared rides'}
+        </p>
 
         {/* Summary */}
         <div className="rp-summary">
@@ -612,77 +717,111 @@ export default function RatingsPage({ userId: userIdProp }) {
           </div>
         )}
 
-        {/* Review form toggle */}
-        {!showForm && (
+        {/* Write a Review — hidden when viewing ride-specific ratings */}
+        {!viewRideId && !showForm && (
           <button className="rp-btn-write" onClick={() => { setShowForm(true); setSubmitError(''); loadPastRides(); }}>
             ✦ Write a Review
           </button>
         )}
 
-        {/* Review form */}
-        {showForm && (
+        {/* Review form — hidden when in ride-ratings view mode */}
+        {!viewRideId && showForm && (
           <div className="rp-form">
             <div className="rp-form-title">Share your experience</div>
 
-            {/* Ride picker — shown when no userId prop */}
+            {/* Ride picker — HIDDEN when coming from Rate Now (preselectedRideId set) */}
             {!userIdProp && (
               <div className="rp-field">
-                <label className="rp-label">Select a past ride <span style={{ color: '#ef4444' }}>*</span></label>
 
-                {ridesLoading && (
-                  <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', padding: '10px 0' }}>Loading your rides…</div>
-                )}
-                {ridesError && !ridesLoading && (
-                  <div className="rp-alert rp-alert-error" style={{ marginBottom: 8 }}>⚠ {ridesError}</div>
-                )}
-                {!ridesLoading && pastRides.length > 0 && (
-                  <div className="rp-ride-list">
-                    {pastRides.map((booking, i) => {
-                      const ride     = booking.rideId || booking;
-                      const provider = ride.providerId;
-
-                      let provId   = '';
-                      let provName = 'Unknown Provider';
-
-                      if (provider && typeof provider === 'object') {
-                        if (provider.name) provName = provider.name;
-                        const rawId = provider._id || provider.id || provider;
-                        provId = rawId?.toString ? rawId.toString() : String(rawId);
-                      } else if (provider) {
-                        provId = provider.toString ? provider.toString() : String(provider);
-                      }
-
-                      if (provName === 'Unknown Provider' && booking.providerName) provName = booking.providerName;
-                      if (!provId && booking.providerId) provId = String(booking.providerId);
-
-                      const rideDate   = ride.date || booking.date;
-                      const dateStr    = rideDate
-                        ? new Date(rideDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-                        : '';
-                      const routeLabel = [ride.pickup?.address, ride.drop?.address].filter(Boolean).join(' → ')
-                        || `Ride on ${dateStr}`;
-                      const isSelected = selectedRide?.bookingId === (booking._id || i);
-
-                      return (
-                        <div key={booking._id || i}
-                          className={`rp-ride-option${isSelected ? ' rp-ride-selected' : ''}`}
-                          onClick={() => {
-                            setSelectedRide({
-                              bookingId:    booking._id || i,
-                              providerId:   provId,
-                              providerName: provName,
-                              routeLabel,
-                            });
-                          }}>
-                          <div className="rp-ride-check">{isSelected ? '✓' : ''}</div>
-                          <div>
-                            <div className="rp-ride-name">{provName}</div>
-                            <div className="rp-ride-route">{routeLabel}{dateStr ? ` · ${dateStr}` : ''}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                {/* If ride is pre-confirmed from notification — show compact confirmed card, no list */}
+                {preselectedRideId && selectedRide ? (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 14,
+                    background: 'rgba(245,158,11,0.06)',
+                    border: '1.5px solid rgba(245,158,11,0.35)',
+                    borderRadius: 14, padding: '14px 18px', marginBottom: 4,
+                  }}>
+                    <div style={{
+                      width: 40, height: 40, borderRadius: '50%',
+                      background: 'linear-gradient(135deg,#f59e0b,#d97706)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 18, flexShrink: 0,
+                    }}>🚗</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: '#f59e0b', fontWeight: 700, fontSize: 14 }}>
+                        {selectedRide.providerName}
+                      </div>
+                      <div style={{ color: 'rgba(255,255,255,0.45)', fontSize: 12, marginTop: 2 }}>
+                        {selectedRide.routeLabel}
+                      </div>
+                    </div>
+                    <div style={{
+                      fontSize: 11, color: '#f59e0b', fontWeight: 700,
+                      background: 'rgba(245,158,11,0.12)', borderRadius: 6,
+                      padding: '3px 8px',
+                    }}>✓ Selected</div>
                   </div>
+                ) : (
+                  /* Normal ride picker list — shown when opening from Write a Review */
+                  <>
+                    <label className="rp-label">Select a past ride <span style={{ color: '#ef4444' }}>*</span></label>
+                    {ridesLoading && (
+                      <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)', padding: '10px 0' }}>Loading your rides…</div>
+                    )}
+                    {ridesError && !ridesLoading && (
+                      <div className="rp-alert rp-alert-error" style={{ marginBottom: 8 }}>⚠ {ridesError}</div>
+                    )}
+                    {!ridesLoading && pastRides.length > 0 && (
+                      <div className="rp-ride-list">
+                        {pastRides.map((booking, i) => {
+                          const ride     = booking.rideId || booking;
+                          const provider = ride.providerId;
+
+                          let provId   = '';
+                          let provName = 'Unknown Provider';
+
+                          if (provider && typeof provider === 'object') {
+                            if (provider.name) provName = provider.name;
+                            const rawId = provider._id || provider.id || provider;
+                            provId = rawId?.toString ? rawId.toString() : String(rawId);
+                          } else if (provider) {
+                            provId = provider.toString ? provider.toString() : String(provider);
+                          }
+
+                          if (provName === 'Unknown Provider' && booking.providerName) provName = booking.providerName;
+                          if (!provId && booking.providerId) provId = String(booking.providerId);
+
+                          const rideDate   = ride.date || booking.date;
+                          const dateStr    = rideDate
+                            ? new Date(rideDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
+                            : '';
+                          const routeLabel = [ride.pickup?.address, ride.drop?.address].filter(Boolean).join(' → ')
+                            || `Ride on ${dateStr}`;
+                          const isSelected = selectedRide?.bookingId === (booking._id || i);
+
+                          return (
+                            <div key={booking._id || i}
+                              className={`rp-ride-option${isSelected ? ' rp-ride-selected' : ''}`}
+                              onClick={() => {
+                                setSelectedRide({
+                                  bookingId:    booking._id || i,
+                                  rideId:       typeof ride === 'object' ? (ride._id || ride.id) : ride,
+                                  providerId:   provId,
+                                  providerName: provName,
+                                  routeLabel,
+                                });
+                              }}>
+                              <div className="rp-ride-check">{isSelected ? '✓' : ''}</div>
+                              <div>
+                                <div className="rp-ride-name">{provName}</div>
+                                <div className="rp-ride-route">{routeLabel}{dateStr ? ` · ${dateStr}` : ''}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
@@ -712,13 +851,15 @@ export default function RatingsPage({ userId: userIdProp }) {
               <button className="rp-btn-cancel" onClick={() => { setShowForm(false); setSubmitError(''); setSelectedRide(null); }}>
                 Cancel
               </button>
-              <button
-                className={`rp-btn-submit${submitting ? ' loading' : ''}`}
-                disabled={!form.rating || submitting || !reviewedUserId}
-                onClick={handleSubmit}
-              >
-                {submitting ? 'Submitting…' : 'Submit Review'}
-              </button>
+              {!alreadyRated && !checkingRating && (
+                <button
+                  className={`rp-btn-submit${submitting ? ' loading' : ''}`}
+                  disabled={!form.rating || submitting || !reviewedUserId || !selectedRide?.rideId}
+                  onClick={handleSubmit}
+                >
+                  {submitting ? 'Submitting…' : 'Submit Review'}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -733,7 +874,11 @@ export default function RatingsPage({ userId: userIdProp }) {
         ) : ratings.length === 0 ? (
           <div className="rp-empty">
             <div className="rp-empty-icon">✦</div>
-            <div>No reviews yet. Be the first to share your experience!</div>
+            <div>
+              {viewRideId
+                ? 'No reviews for this ride yet. Passengers haven\'t submitted feedback.'
+                : 'No reviews yet. Be the first to share your experience!'}
+            </div>
           </div>
         ) : (
           <div className="rp-list">
