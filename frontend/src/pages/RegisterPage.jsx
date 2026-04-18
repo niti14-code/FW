@@ -98,34 +98,12 @@ export default function RegisterPage({ navigate }) {
 
   return (
     <div className="auth-shell">
-      {/* Left panel */}
-      <div className="auth-brand-panel">
-        <div className="abp-inner">
-          <div className="abp-logo">Campus<span>Ride</span></div>
-          <h1 className="abp-headline display">
-            Join your<br/>campus<br/><em>ride network.</em>
-          </h1>
-          <p className="abp-sub">Verified accounts, real students, zero hassle.</p>
-          <div className="abp-steps">
-            {[
-              { n:'1', t:'Create account' },
-              { n:'2', t:'Upload KYC docs' },
-              { n:'3', t:'Get verified & ride' },
-            ].map(s => (
-              <div key={s.n} className="abp-step">
-                <div className="abp-step-n">{s.n}</div>
-                <span style={{fontSize:14, fontWeight:500}}>{s.t}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="abp-glow" />
-      </div>
-
-      {/* Right form */}
       <div className="auth-form-panel">
         <form className="auth-form fade-up" onSubmit={submit} noValidate>
           <div className="af-header">
+            <div style={{fontFamily:'var(--font-display)',fontSize:22,fontWeight:800,color:'var(--text)',marginBottom:12}}>
+              Campus<span style={{color:'var(--accent)'}}>Ride</span>
+            </div>
             <h2 className="heading" style={{fontSize:26}}>Create account</h2>
             <p className="text-muted mt-8 text-sm">Join thousands of campus commuters</p>
           </div>

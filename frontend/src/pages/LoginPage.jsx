@@ -11,7 +11,7 @@ export default function LoginPage({ navigate }) {
   const [showForgot,  setShowForgot] = useState(false);
   const [forgotEmail, setForgotEmail]= useState('');
   const [forgotSent,  setForgotSent] = useState(false);
-  
+
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const submit = async e => {
@@ -38,14 +38,6 @@ export default function LoginPage({ navigate }) {
   // Forgot password screen
   if (showForgot) return (
     <div className="auth-shell">
-      <div className="auth-brand-panel">
-        <div className="abp-inner">
-          <div className="abp-logo">Campus<span>Ride</span></div>
-          <h1 className="abp-headline display">Reset your<br/>password<br/><em>easily.</em></h1>
-          <p className="abp-sub">Enter your registered college email and we'll send you a reset link.</p>
-        </div>
-        <div className="abp-glow" />
-      </div>
       <div className="auth-form-panel">
         <form className="auth-form fade-up" onSubmit={handleForgot} noValidate>
           <div className="af-header">
@@ -88,44 +80,20 @@ export default function LoginPage({ navigate }) {
     </div>
   );
 
-  // Main login form
   return (
     <div className="auth-shell">
-      {/* Left brand panel */}
-      <div className="auth-brand-panel">
-        <div className="abp-inner">
-          <div className="abp-logo">Campus<span>Ride</span></div>
-          <h1 className="abp-headline display">
-            Share the<br/>commute,<br/><em>save the cost.</em>
-          </h1>
-          <p className="abp-sub">
-            The verified ride-sharing platform built exclusively for college students.
-          </p>
-          <div className="abp-stats">
-            <div><div className="abp-stat-n">4.2K</div><div className="abp-stat-l">Active Riders</div></div>
-            <div><div className="abp-stat-n">₹180</div><div className="abp-stat-l">Avg Saved/mo</div></div>
-            <div><div className="abp-stat-n">18+</div><div className="abp-stat-l">Colleges</div></div>
-          </div>
-          <div className="abp-features">
-            {['✓  Verified student IDs', '✓  Geo-matched rides', '✓  Real-time bookings'].map(f => (
-              <div key={f} className="abp-feature">{f}</div>
-            ))}
-          </div>
-        </div>
-        <div className="abp-glow" />
-      </div>
-
-      {/* Right form panel */}
       <div className="auth-form-panel">
         <form className="auth-form fade-up" onSubmit={submit} noValidate>
           <div className="af-header">
+            <div style={{fontFamily:'var(--font-display)',fontSize:22,fontWeight:800,color:'var(--text)',marginBottom:12}}>
+              Campus<span style={{color:'var(--accent)'}}>Ride</span>
+            </div>
             <h2 className="heading" style={{fontSize:26}}>Welcome back</h2>
             <p className="text-muted mt-8 text-sm">Sign in to your CampusRide account</p>
           </div>
 
           {error && <div className="alert alert-error">{error}</div>}
 
-          {/* Email */}
           <div className="field">
             <label>College Email</label>
             <div className="input-wrap">
@@ -135,7 +103,6 @@ export default function LoginPage({ navigate }) {
             </div>
           </div>
 
-          {/* Password with show/hide + forgot */}
           <div className="field">
             <div className="field-label-row">
               <label style={{marginBottom:0}}>Password</label>
@@ -153,13 +120,9 @@ export default function LoginPage({ navigate }) {
                 value={form.password}
                 onChange={set('password')}
               />
-              <button
-                type="button"
-                className="show-pass-btn"
-                onClick={() => setShowPass(s => !s)}
-                tabIndex={-1}
-                title={showPass ? 'Hide password' : 'Show password'}
-              >
+              <button type="button" className="show-pass-btn"
+                onClick={() => setShowPass(s => !s)} tabIndex={-1}
+                title={showPass ? 'Hide password' : 'Show password'}>
                 {showPass ? '🙈' : '👁️'}
               </button>
             </div>

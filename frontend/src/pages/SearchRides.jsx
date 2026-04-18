@@ -259,7 +259,7 @@ export default function SearchRides({ navigate }) {
                 <LocationSearch
                   value={filters.dropLabel || ''}
                   onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
-                  placeholder="Search for your destination (optional)..."
+                  placeholder="Search for your destination ..."
                   excludeColleges={true}
                 />
               )}
@@ -283,7 +283,7 @@ export default function SearchRides({ navigate }) {
             
             {/* Date */}
             <div className="field" style={{marginBottom:0}}>
-              <label>Date (optional)</label>
+              <label>Date</label>
               <input className="input" type="date" min={new Date().toISOString().split('T')[0]}
                 value={filters.date} onChange={set('date')} />
             </div>
