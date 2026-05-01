@@ -54,6 +54,42 @@ exports.createRide = async (req, res) => {
     });
 
     await ride.save();
+    const Alert = require('../alerts/alerts.model');
+
+const alerts = await Alert.find({ isActive: true });
+
+for (const alert of alerts) {
+  try {
+    const pickupDistance = calculateDistance(
+      ride.pickup.coordinates[1],
+      ride.pickup.coordinates[0],
+      alert.pickup.coordinates[1],
+      alert.pickup.coordinates[0]
+    );
+
+    if (pickupDistance > alert.pickupRadius) continue;
+
+    const dropDistance = calculateDistance(
+      ride.drop.coordinates[1],
+      ride.drop.coordinates[0],
+      alert.drop.coordinates[1],
+      alert.drop.coordinates[0]
+    );
+
+    if (dropDistance > alert.dropRadius) continue;
+
+    await Notification.create({
+      userId: alert.userId,
+      type: 'alert_match',
+      title: '🚗 New Ride Available!',
+      message: `New ride from ${ride.pickup.address} → ${ride.drop.address}`,
+      data: { rideId: ride._id }
+    });
+
+  } catch (err) {
+    console.error('Alert match error:', err);
+  }
+}
 
     // DEBUG: Log what was saved
     console.log('=== RIDE SAVED ===');

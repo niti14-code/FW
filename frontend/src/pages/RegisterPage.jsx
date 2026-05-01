@@ -3,6 +3,9 @@ import { useAuth } from '../context/AuthContext.jsx';
 import { validateCollegeEmail, getDomainsForCollege } from '../data/collegeDomains.js';
 import './AuthPages.css';
 
+const CLOUD_NAME = "dhkui5t39";
+const UPLOAD_PRESET = "kyc_upload";
+
 const ROLES = [
   { value:'seeker',   icon:'🎒', title:'Seeker',   desc:'I need rides' },
   { value:'provider', icon:'🚗', title:'Provider', desc:'I offer rides' },
@@ -30,6 +33,26 @@ export default function RegisterPage({ navigate }) {
 
   const isProvider = form.role === 'provider' || form.role === 'both';
 
+  const uploadToCloudinary = (file) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", UPLOAD_PRESET);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`);
+
+    xhr.onload = () => {
+      const data = JSON.parse(xhr.responseText);
+      if (data.secure_url) resolve(data.secure_url);
+      else reject("Upload failed");
+    };
+
+    xhr.onerror = () => reject("Upload error");
+
+    xhr.send(formData);
+  });
+};
   // Live email-domain validation (only for non-admin roles)
   const emailValidation = useMemo(() => {
     if (form.role === 'admin') return { valid: true, message: '' };
@@ -78,14 +101,29 @@ export default function RegisterPage({ navigate }) {
     if (v) { setError(v); return; }
     setLoading(true);
     try {
+      let aadharUrl = null;
+let collegeIdUrl = null;
+let licenseUrl = null;
+
+if (kycDocs.aadhar) {
+  aadharUrl = await uploadToCloudinary(kycDocs.aadhar);
+}
+
+if (kycDocs.collegeId) {
+  collegeIdUrl = await uploadToCloudinary(kycDocs.collegeId);
+}
+
+if (kycDocs.license) {
+  licenseUrl = await uploadToCloudinary(kycDocs.license);
+}
       await registerUser({
         ...form,
         adminKey,
         emergencyContact,
         //vehicleType:    isProvider ? vehicleType : '',
-        aadhar:         kycDocs.aadhar       ? kycDocs.aadhar.name       : '',
-        drivingLicense: kycDocs.license      ? kycDocs.license.name      : '',
-        collegeIdCard:  kycDocs.collegeId    ? kycDocs.collegeId.name    : '',
+        aadhar:        aadharUrl,
+        collegeIdCard:     collegeIdUrl,
+        drivingLicense:       licenseUrl,
         vehicleNumber:  vehicleNumber        ? vehicleNumber.toUpperCase() : '',
       });
       navigate('dashboard');
