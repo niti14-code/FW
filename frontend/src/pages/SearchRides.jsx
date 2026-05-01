@@ -40,15 +40,32 @@ export default function SearchRides({ navigate }) {
   };
 
   const [locationConfig, setLocationConfig] = useState(getTimeBasedLocationConfig());
+  const [pickupType, setPickupType] = useState('college'); // 'college' or 'home'
 
   // Update location config every minute
   useEffect(() => {
     const interval = setInterval(() => {
-      setLocationConfig(getTimeBasedLocationConfig());
     }, 60000); // Update every minute
 
     return () => clearInterval(interval);
-  }, []);
+  }, [pickupType]);
+
+  // Get effective location config based on pickup type for seekers
+  const getEffectiveLocationConfig = () => {
+    if (pickupType === 'college') {
+      return {
+        pickupIsCollege: true,
+        dropIsCollege: false,
+        message: "Searching for rides picking up from colleges"
+      };
+    } else {
+      return {
+        pickupIsCollege: false,
+        dropIsCollege: true,
+        message: "Searching for rides picking up from home locations"
+      };
+    }
+  };
 
   const isSeeker = user?.role === 'seeker' || user?.role === 'both';
   if (!isSeeker) {
@@ -217,10 +234,33 @@ export default function SearchRides({ navigate }) {
           <span className="card-title">Search Filters</span>
         </div>
         <div className="card-body">
-          {locationConfig.message && (
+          {/* ── Pickup Type Selection ── */}
+          <div className="field mb-32">
+            <label>Where do you want to be picked up from? *</label>
+            <div className="pickup-type-grid">
+              <button 
+                type="button"
+                className={`pickup-type-btn ${pickupType === 'college' ? 'selected' : ''}`}
+                onClick={() => setPickupType('college')}
+              >
+                <span className="icon">🏫</span>
+                <span className="text">College</span>
+              </button>
+              <button 
+                type="button"
+                className={`pickup-type-btn ${pickupType === 'home' ? 'selected' : ''}`}
+                onClick={() => setPickupType('home')}
+              >
+                <span className="icon">🏠</span>
+                <span className="text">Home</span>
+              </button>
+            </div>
+          </div>
+
+          {getEffectiveLocationConfig().message && (
             <div className="alert alert-info mb-16" style={{background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#22c55e'}}>
-              <span style={{marginRight: 8}}>🎓</span>
-              {locationConfig.message}
+              <span style={{marginRight: 8}}>{pickupType === 'college' ? '🎓' : '🏠'}</span>
+              {getEffectiveLocationConfig().message}
             </div>
           )}
           {error && <div className="alert alert-error mb-16">{error}</div>}
@@ -230,7 +270,7 @@ export default function SearchRides({ navigate }) {
             {/* Pickup Location */}
             <div className="field" style={{marginBottom:0, gridColumn: '1 / -1'}}>
               <label>Pickup Location *</label>
-              {locationConfig.pickupIsCollege ? (
+              {getEffectiveLocationConfig().pickupIsCollege ? (
                 <CollegeLocationSearch
                   value={filters.pickupLabel || ''}
                   onChange={(label, lat, lng) => setFilters(f => ({ ...f, pickupLabel: label, lat: lat.toString(), lng: lng.toString() }))}
@@ -249,7 +289,7 @@ export default function SearchRides({ navigate }) {
             {/* Drop Location */}
             <div className="field" style={{marginBottom:0, gridColumn: '1 / -1'}}>
               <label>Drop Location <span style={{color: 'rgba(255,255,255,0.4)', fontWeight: 400}}>(optional)</span></label>
-              {locationConfig.dropIsCollege ? (
+              {getEffectiveLocationConfig().dropIsCollege ? (
                 <CollegeLocationSearch
                   value={filters.dropLabel || ''}
                   onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
