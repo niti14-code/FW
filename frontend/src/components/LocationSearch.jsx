@@ -8,7 +8,8 @@ export default function LocationSearch({
   placeholder = 'Search for a location...',
   onLocationSelect,
   className = '',
-  excludeColleges = false
+  excludeColleges = false,
+  showGeoButton = true
 }) {
   const [query, setQuery] = useState(value || '');
   const [suggestions, setSuggestions] = useState([]);
@@ -186,14 +187,16 @@ export default function LocationSearch({
           className="location-input"
           onFocus={() => query.length >= 2 && setShowSuggestions(true)}
         />
-        <button
-          type="button"
-          onClick={handleGeolocation}
-          className="geo-button"
-          title="Use my current location"
-        >
-          📍
-        </button>
+        {showGeoButton && (
+          <button
+            type="button"
+            onClick={handleGeolocation}
+            className="geo-button"
+            title="Use my current location"
+          >
+            📍
+          </button>
+        )}
         {loading && <div className="search-spinner">⟳</div>}
       </div>
 

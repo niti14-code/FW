@@ -282,13 +282,14 @@ export default function SearchRides({ navigate }) {
                   onChange={(label, lat, lng) => setFilters(f => ({ ...f, pickupLabel: label, lat: lat.toString(), lng: lng.toString() }))}
                   placeholder="Search for your pickup location..."
                   excludeColleges={true}
+                  showGeoButton={pickupType === 'home'}
                 />
               )}
             </div>
             
             {/* Drop Location */}
             <div className="field" style={{marginBottom:0, gridColumn: '1 / -1'}}>
-              <label>Drop Location <span style={{color: 'rgba(255,255,255,0.4)', fontWeight: 400}}>(optional)</span></label>
+              <label>Drop Location <span style={{color: 'rgba(255,255,255,0.4)', fontWeight: 400}}></span></label>
               {getEffectiveLocationConfig().dropIsCollege ? (
                 <CollegeLocationSearch
                   value={filters.dropLabel || ''}
@@ -301,6 +302,7 @@ export default function SearchRides({ navigate }) {
                   onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
                   placeholder="Search for your destination ..."
                   excludeColleges={true}
+                  showGeoButton={false}
                 />
               )}
               <span style={{fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4, display: 'block'}}>

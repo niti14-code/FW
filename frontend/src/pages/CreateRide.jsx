@@ -283,6 +283,7 @@ export default function CreateRide({ navigate }) {
                 placeholder="Search for pickup location..."
                 className="mb-12"
                 excludeColleges={true}
+                showGeoButton={pickupType === 'home'}
               />
             )}
           </div>
@@ -309,6 +310,7 @@ export default function CreateRide({ navigate }) {
                 placeholder="Search for drop location..."
                 className="mb-12"
                 excludeColleges={locationConfig.dropExcludeColleges}
+                showGeoButton={false}
               />
             )}
           </div>
