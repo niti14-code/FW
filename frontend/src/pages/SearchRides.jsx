@@ -32,14 +32,6 @@ export default function SearchRides({ navigate }) {
 
   const set = k => e => setFilters(f => ({ ...f, [k]: e.target.value }));
 
-  const geoLocate = () => {
-    if (!navigator.geolocation) { setError('Geolocation not supported'); return; }
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => setFilters(f => ({ ...f, lat: coords.latitude, lng: coords.longitude })),
-      () => setError('Could not detect location. Enter manually.')
-    );
-  };
-
   const doSearch = useCallback(async e => {
     e?.preventDefault();
     setError('');

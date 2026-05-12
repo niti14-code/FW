@@ -249,3 +249,10 @@
   padding: 20px 14px !important;
   text-align: center;
 }
+
+/* Geo button loading state */
+.geo-button.geo-loading {
+  animation: spin 0.8s linear infinite;
+  opacity: 0.7;
+  cursor: not-allowed;
+}

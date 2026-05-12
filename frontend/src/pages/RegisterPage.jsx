@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { validateCollegeEmail, getDomainsForCollege } from '../data/collegeDomains.js';
 import './AuthPages.css';
@@ -29,6 +29,13 @@ export default function RegisterPage({ navigate }) {
   const [role, setRole] = useState('');
   const [adminKey, setAdminKey] = useState('');
 
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraType, setCameraType] = useState(null);
+  const [cameraStream, setCameraStream] = useState(null);
+
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }));
 
   const isProvider = form.role === 'provider' || form.role === 'both';
@@ -67,6 +74,29 @@ export default function RegisterPage({ navigate }) {
     return domains.length > 0 ? `Use your @${domains[0]} college email` : 'Use your official college email (not Gmail/Yahoo)';
   }, [form.college, form.role]);
 
+  useEffect(() => {
+
+  if (
+    cameraOpen &&
+    cameraStream &&
+    videoRef.current
+  ) {
+
+    videoRef.current.srcObject = cameraStream;
+
+    videoRef.current.onloadedmetadata = async () => {
+
+      try {
+        await videoRef.current.play();
+      } catch (err) {
+        console.error(err);
+      }
+
+    };
+  }
+
+}, [cameraOpen, cameraStream]);
+
   const validate = () => {
     if (!form.name.trim())    return 'Name is required';
     if (!form.email.trim())   return 'Email is required';
@@ -93,7 +123,87 @@ export default function RegisterPage({ navigate }) {
     }
     return null;
   };
+  const openCamera = async (type) => {
 
+  try {
+
+    const stream =
+      await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+    streamRef.current = stream;
+
+    setCameraType(type);
+
+    setCameraStream(stream);
+
+    setCameraOpen(true);
+
+  } catch (err) {
+
+    console.error(err);
+
+    setError(
+      'Unable to access camera'
+    );
+  }
+};
+
+const closeCamera = () => {
+
+  if (streamRef.current) {
+
+    streamRef.current
+      .getTracks()
+      .forEach(track => track.stop());
+
+    streamRef.current = null;
+  }
+
+  setCameraStream(null);
+
+  if (videoRef.current) {
+    videoRef.current.srcObject = null;
+  }
+
+  setCameraOpen(false);
+};
+
+const capturePhoto = () => {
+
+  const video = videoRef.current;
+  const canvas = canvasRef.current;
+
+  const context = canvas.getContext('2d');
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  context.drawImage(video, 0, 0);
+
+  canvas.toBlob((blob) => {
+
+    const file = new File(
+      [blob],
+      `${cameraType}.jpg`,
+      { type: 'image/jpeg' }
+    );
+
+    setKycDocs(prev => ({
+      ...prev,
+      [cameraType]: file
+    }));
+
+    closeCamera();
+
+  }, 'image/jpeg', 0.9);
+};
   const submit = async e => {
     e.preventDefault();
     setError('');
@@ -102,8 +212,8 @@ export default function RegisterPage({ navigate }) {
     setLoading(true);
     try {
       let aadharUrl = null;
-let collegeIdUrl = null;
-let licenseUrl = null;
+      let collegeIdUrl = null;
+      let licenseUrl = null;
 
 if (kycDocs.aadhar) {
   aadharUrl = await uploadToCloudinary(kycDocs.aadhar);
@@ -133,7 +243,37 @@ if (kycDocs.license) {
       setLoading(false);
     }
   };
+const UploadActions = ({ type }) => (
+  <div className="register-upload-actions">
 
+    {/* Upload */}
+    <label className="register-upload-btn">
+      📁 Upload
+
+      <input
+        type="file"
+        accept="image/*,.pdf"
+        hidden
+        onChange={e =>
+          setKycDocs(prev => ({
+            ...prev,
+            [type]: e.target.files[0]
+          }))
+        }
+      />
+    </label>
+
+    {/* Camera */}
+    <button
+      type="button"
+      className="register-upload-btn webcam"
+      onClick={() => openCamera(type)}
+    >
+      📷 Camera
+    </button>
+
+  </div>
+);
   return (
     <div className="auth-shell">
       <div className="auth-form-panel">
@@ -289,16 +429,18 @@ if (kycDocs.license) {
                 {/* Aadhar — all roles */}
                 <div className="field">
                   <label>🪪 Aadhar Card *</label>
-                  <input type="file" className="input kyc-file-input" accept="image/*,.pdf"
-                    onChange={e => setKycDocs(prev => ({ ...prev, aadhar: e.target.files[0] }))} />
+                  {/*<input type="file" className="input kyc-file-input" accept="image/*,.pdf"
+                    onChange={e => setKycDocs(prev => ({ ...prev, aadhar: e.target.files[0] }))} />*/}
+                    <UploadActions type="aadhar" />
                   {kycDocs.aadhar && <p className="field-success-msg">✓ {kycDocs.aadhar.name}</p>}
                 </div>
 
                 {/* College ID — all roles */}
                 <div className="field">
                   <label>🎓 College ID Card *</label>
-                  <input type="file" className="input kyc-file-input" accept="image/*,.pdf"
-                    onChange={e => setKycDocs(prev => ({ ...prev, collegeId: e.target.files[0] }))} />
+                  {/*<input type="file" className="input kyc-file-input" accept="image/*,.pdf"
+                    onChange={e => setKycDocs(prev => ({ ...prev, collegeId: e.target.files[0] }))} />*/}
+                    <UploadActions type="collegeId" />
                   {kycDocs.collegeId && <p className="field-success-msg">✓ {kycDocs.collegeId.name}</p>}
                 </div>
 
@@ -306,9 +448,11 @@ if (kycDocs.license) {
                 {isProvider && (
                   <div className="field">
                     <label>🚗 Driving License *</label>
-                    <input type="file" className="input kyc-file-input" accept="image/*,.pdf"
-                      onChange={e => setKycDocs(prev => ({ ...prev, license: e.target.files[0] }))} />
+                    {/*<input type="file" className="input kyc-file-input" accept="image/*,.pdf"
+                      onChange={e => setKycDocs(prev => ({ ...prev, license: e.target.files[0] }))} />*/}
+                      <UploadActions type="license" />
                     {kycDocs.license && <p className="field-success-msg">✓ {kycDocs.license.name}</p>}
+                    
                   </div>
                 )}
 
@@ -356,6 +500,48 @@ if (kycDocs.license) {
             </button>
           </p>
         </form>
+        {cameraOpen && (
+  <div className="camera-modal">
+
+    <div className="camera-box">
+
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="camera-video"
+      />
+
+      <canvas
+        ref={canvasRef}
+        style={{ display: 'none' }}
+      />
+
+      <div className="camera-actions">
+
+        <button
+          type="button"
+          className="btn btn-outline"
+          onClick={closeCamera}
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={capturePhoto}
+        >
+          Capture
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+)}
       </div>
     </div>
   );
