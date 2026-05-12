@@ -7,9 +7,7 @@ export default function LocationSearch({
   onChange, 
   placeholder = 'Search for a location...',
   onLocationSelect,
-  className = '',
-  excludeColleges = false,
-  showGeoButton = true
+  className = ''
 }) {
   const [query, setQuery] = useState(value || '');
   const [suggestions, setSuggestions] = useState([]);
@@ -33,45 +31,7 @@ export default function LocationSearch({
     try {
       const results = await api.searchLocation(searchQuery);
       console.log('Search results:', results);
-      
-      // Filter out colleges if excludeColleges is true
-      const filteredResults = excludeColleges 
-        ? results.filter(location => {
-            const isCollege = location.display_name && (
-              location.display_name.toLowerCase().includes('college') ||
-              location.display_name.toLowerCase().includes('university') ||
-              location.display_name.toLowerCase().includes('institute') ||
-              location.display_name.toLowerCase().includes('medical') ||
-              location.display_name.toLowerCase().includes('engineering') ||
-              location.display_name.toLowerCase().includes('dental') ||
-              location.display_name.toLowerCase().includes('pharmacy') ||
-              location.display_name.toLowerCase().includes('law') ||
-              location.display_name.toLowerCase().includes('architecture') ||
-              location.display_name.toLowerCase().includes('nursing') ||
-              location.display_name.toLowerCase().includes('management') ||
-              location.display_name.toLowerCase().includes('arts') ||
-              location.display_name.toLowerCase().includes('science') ||
-              location.display_name.toLowerCase().includes('commerce') ||
-              location.label.toLowerCase().includes('college') ||
-              location.label.toLowerCase().includes('university') ||
-              location.label.toLowerCase().includes('institute') ||
-              location.label.toLowerCase().includes('medical') ||
-              location.label.toLowerCase().includes('engineering') ||
-              location.label.toLowerCase().includes('dental') ||
-              location.label.toLowerCase().includes('pharmacy') ||
-              location.label.toLowerCase().includes('law') ||
-              location.label.toLowerCase().includes('architecture') ||
-              location.label.toLowerCase().includes('nursing') ||
-              location.label.toLowerCase().includes('management') ||
-              location.label.toLowerCase().includes('arts') ||
-              location.label.toLowerCase().includes('science') ||
-              location.label.toLowerCase().includes('commerce')
-            );
-            return !isCollege;
-          })
-        : results;
-      
-      setSuggestions(filteredResults);
+      setSuggestions(results);
       setShowSuggestions(true);
     } catch (error) {
       console.error('Search failed:', error);
@@ -79,7 +39,7 @@ export default function LocationSearch({
     } finally {
       setLoading(false);
     }
-  }, [excludeColleges]);
+  }, []);
 
   // Handle search with debouncing
   const handleSearch = (searchQuery) => {
@@ -98,24 +58,14 @@ export default function LocationSearch({
 
   // Handle location selection
   const handleSelect = (location) => {
-    console.log('Location selected:', location);
-    console.log('Label:', location.label);
-    console.log('Lat:', location.lat);
-    console.log('Lng:', location.lng);
-    console.log('Display name:', location.display_name);
-    
-    setQuery(location.label);
+    // Use the short label for the input field, full display_name for reference
+    const displayText = location.label || location.display_name?.split(',').slice(0, 2).join(',').trim() || 'Selected Location';
+    setQuery(displayText);
     setShowSuggestions(false);
     setSuggestions([]);
-    
-    if (onChange) {
-      console.log('Calling onChange with:', location.label, location.lat, location.lng);
-      onChange(location.label, location.lat, location.lng);
-    }
-    if (onLocationSelect) {
-      console.log('Calling onLocationSelect with:', location);
-      onLocationSelect(location);
-    }
+
+    if (onChange)         onChange(displayText, location.lat, location.lng);
+    if (onLocationSelect) onLocationSelect({ ...location, label: displayText });
   };
 
   // Handle geolocation
@@ -187,16 +137,14 @@ export default function LocationSearch({
           className="location-input"
           onFocus={() => query.length >= 2 && setShowSuggestions(true)}
         />
-        {showGeoButton && (
-          <button
-            type="button"
-            onClick={handleGeolocation}
-            className="geo-button"
-            title="Use my current location"
-          >
-            📍
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={handleGeolocation}
+          className="geo-button"
+          title="Use my current location"
+        >
+          📍
+        </button>
         {loading && <div className="search-spinner">⟳</div>}
       </div>
 
@@ -208,23 +156,30 @@ export default function LocationSearch({
               <span>Searching locations...</span>
             </div>
           ) : suggestions.length > 0 ? (
-            suggestions.map((suggestion, index) => (
-              <div
-                key={index}
-                className="suggestion-item"
-                onClick={() => handleSelect(suggestion)}
-              >
-                <div className="suggestion-text">{suggestion.display_name}</div>
-              </div>
-            ))
+            suggestions.map((suggestion, index) => {
+              const mainLabel = suggestion.label || suggestion.display_name?.split(',')[0];
+              const subLabel  = suggestion.display_name;
+              return (
+                <div key={index} className="suggestion-item" onClick={() => handleSelect(suggestion)}>
+                  <div className="suggestion-icon">📍</div>
+                  <div className="suggestion-body">
+                    <div className="suggestion-main">{mainLabel}</div>
+                    {subLabel && subLabel !== mainLabel && (
+                      <div className="suggestion-sub">{subLabel}</div>
+                    )}
+                  </div>
+                </div>
+              );
+            })
           ) : query.length >= 2 ? (
             <div className="suggestion-empty">
-              <span>No locations found</span>
-              <small>Try searching for a different location</small>
+              <div className="suggestion-empty-icon">🔍</div>
+              <span>No results for "{query}"</span>
+              <small>Try: area name, college, landmark, or full address</small>
             </div>
           ) : (
             <div className="suggestion-empty">
-              <span>Type at least 2 characters to search</span>
+              <span>Type an area, college, or landmark</span>
             </div>
           )}
         </div>

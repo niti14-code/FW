@@ -76,78 +76,10 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  max-height: 320px;
+  max-height: 300px;
   overflow-y: auto;
-  overflow-x: hidden;
-  z-index: 9999;
-  margin-top: 4px;
-  /* Better scrolling */
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) var(--surface2);
-  /* Ensure smooth scrolling on touch devices */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  /* Improve scrolling performance */
-  scroll-behavior: smooth;
-  /* Ensure proper scrolling on mobile */
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
-  /* Ensure scrolling works on all devices */
-  -ms-overflow-style: -ms-autohiding-scrollbar;
-  -ms-overflow-style: -ms-autohiding-scrollbar;
-  /* Fix for iOS momentum scrolling */
-  -webkit-overflow-scrolling: touch;
-  /* Fix for Firefox */
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) var(--surface2);
-}
-
-/* Additional scrolling improvements for LocationSearch in RideDetail page */
-.ride-detail .location-suggestions {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  max-height: 320px;
-  overflow-y: auto;
-  overflow-x: hidden;
   z-index: 1000;
   margin-top: 4px;
-  /* Better scrolling */
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) var(--surface2);
-  /* Ensure smooth scrolling on touch devices */
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  /* Improve scrolling performance */
-  scroll-behavior: smooth;
-  /* Ensure proper scrolling on mobile */
-  -webkit-overflow-scrolling: touch;
-  touch-action: pan-y;
-}
-
-/* Webkit scrollbar styling */
-.location-suggestions::-webkit-scrollbar {
-  width: 6px;
-}
-
-.location-suggestions::-webkit-scrollbar-track {
-  background: var(--surface2);
-  border-radius: 3px;
-}
-
-.location-suggestions::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 3px;
-  transition: background 0.2s ease;
-}
-
-.location-suggestions::-webkit-scrollbar-thumb:hover {
-  background: var(--text3);
 }
 
 .suggestion-item {
@@ -155,9 +87,8 @@
   align-items: center;
   padding: 12px 16px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease;
   border-bottom: 1px solid var(--border);
-  position: relative;
 }
 
 .suggestion-item:last-child {
@@ -166,23 +97,6 @@
 
 .suggestion-item:hover {
   background: var(--surface2);
-  transform: translateX(2px);
-}
-
-.suggestion-item:active {
-  background: var(--surface3);
-  transform: translateX(1px);
-}
-
-.suggestion-item.selected {
-  background: var(--accent);
-  color: white;
-  transform: translateX(2px);
-}
-
-.suggestion-item.selected .suggestion-text {
-  color: white;
-  font-weight: 600;
 }
 
 /* Loading and Empty States */
@@ -299,4 +213,39 @@
   color: var(--text2);
   font-size: 14px;
   font-style: italic;
+}
+
+/* ── Two-line suggestion item ── */
+.suggestion-item {
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 10px;
+  padding: 10px 14px !important;
+}
+.suggestion-icon { font-size: 14px; flex-shrink: 0; margin-top: 2px; }
+.suggestion-body { flex: 1; min-width: 0; }
+.suggestion-main {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.suggestion-sub {
+  font-size: 11px;
+  color: var(--text2, #888);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.suggestion-empty-icon { font-size: 20px; margin-bottom: 4px; }
+.suggestion-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px 14px !important;
+  text-align: center;
 }

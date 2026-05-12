@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import * as api from '../services/api.js';
 import './KYCPage.css';
@@ -20,26 +20,15 @@ export default function KYCPage({ navigate }) {
   const [fetchingStatus, setFetchingStatus] = useState(true);
   const [error, setError] = useState('');
   const [kycStatus, setKycStatus] = useState(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [cameraType, setCameraType] = useState(null);
+  const [cameraStream, setCameraStream] = useState(null);
 
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
   const isProvider = user?.role === 'provider' || user?.role === 'both';
 
-  /*const getDocUrl = (docType, filename) => {
-  if (!filename) return null;
-
-  // ✅ If base64 → use directly (THIS IS YOUR MAIN FIX)
-  if (filename.startsWith('data:image')) {
-    return filename;
-  }
-
-  // ✅ If external URL → allow
-  if (filename.startsWith('http')) {
-    return filename;
-  }
-
-  // ❌ Ignore everything else (like "dsa1.jpg")
-  console.warn("Invalid image format:", filename);
-  return null;
-  };*/
   const getDocUrl = (docType, url) => {
   if (!url) return null;
 
@@ -51,6 +40,29 @@ export default function KYCPage({ navigate }) {
   useEffect(() => {
     fetchKycStatus();
   }, []);
+
+  useEffect(() => {
+
+  if (
+    cameraOpen &&
+    cameraStream &&
+    videoRef.current
+  ) {
+
+    videoRef.current.srcObject = cameraStream;
+
+    videoRef.current.onloadedmetadata = async () => {
+
+      try {
+        await videoRef.current.play();
+      } catch (err) {
+        console.error(err);
+      }
+
+    };
+  }
+
+}, [cameraOpen, cameraStream]);
 
   const fetchKycStatus = async () => {
   setFetchingStatus(true);
@@ -99,25 +111,130 @@ export default function KYCPage({ navigate }) {
 };
 
   const handleFile = (key) => async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+  const file = e.target.files[0];
 
-    if (file.size > 7 * 1024 * 1024) {
-      setError('File size must be less than 7MB');
-      return;
-    }
-    if (!file.type.startsWith('image/')) {
-      setError('Only image files are allowed');
-      return;
-    }
+  if (!file) return;
+
+  if (file.size > 10 * 1024 * 1024) {
+    setError('File size must be less than 10MB');
+    return;
+  }
+
+  if (!file.type.startsWith('image/')) {
+    setError('Only image files are allowed');
+    return;
+  }
+
+  setError('');
+
+  setForm(prev => ({
+    ...prev,
+    [key]: file,
+  }));
+
+  const reader = new FileReader();
+
+  reader.onload = (ev) => {
+    setPreview(prev => ({
+      ...prev,
+      [key]: ev.target.result,
+    }));
+  };
+
+  reader.readAsDataURL(file);
+};
+
+const openCamera = async (type = 'selfie') => {
+
+  try {
 
     setError('');
-    setForm(f => ({ ...f, [key]: file }));
 
-    const reader = new FileReader();
-    reader.onload = ev => setPreview(p => ({ ...p, [key]: ev.target.result }));
-    reader.readAsDataURL(file);
-  };
+    const stream =
+      await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode:
+            type === 'selfie'
+              ? 'user'
+              : 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+    streamRef.current = stream;
+
+    setCameraType(type);
+
+    setCameraStream(stream);
+
+    setCameraOpen(true);
+
+  } catch (err) {
+
+    console.error(err);
+
+    setError(
+      'Unable to access camera. Please allow camera permissions.'
+    );
+  }
+};
+
+const closeCamera = () => {
+
+  if (streamRef.current) {
+
+    streamRef.current
+      .getTracks()
+      .forEach(track => track.stop());
+
+    streamRef.current = null;
+  }
+
+  setCameraStream(null);
+
+  if (videoRef.current) {
+    videoRef.current.srcObject = null;
+  }
+
+  setCameraOpen(false);
+};
+
+const capturePhoto = () => {
+  const video = videoRef.current;
+  const canvas = canvasRef.current;
+
+  const context = canvas.getContext('2d');
+
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+
+  context.drawImage(video, 0, 0);
+
+  canvas.toBlob((blob) => {
+    const file = new File(
+      [blob],
+      `${cameraType}.jpg`,
+      { type: 'image/jpeg' }
+    );
+
+    setForm(prev => ({
+      ...prev,
+      [cameraType]: file,
+    }));
+
+    const imageUrl = URL.createObjectURL(blob);
+
+    setPreview(prev => ({
+      ...prev,
+      [cameraType]: imageUrl,
+    }));
+
+    closeCamera();
+
+  }, 'image/jpeg', 0.9);
+};
 // upload to cloudinary
   const uploadToCloudinary = async (file) => {
   const formData = new FormData();
@@ -227,6 +344,46 @@ export default function KYCPage({ navigate }) {
     setLoading(false);
   }
 };
+
+  const UploadActions = ({ type, selfie = false }) => (
+  <div className="kyc-upload-actions">
+
+    {/* Upload */}
+    <label className="kyc-upload-btn">
+      📁 Upload
+
+      <input
+        type="file"
+        accept="image/png,image/jpeg,image/jpg"
+        onChange={handleFile(type)}
+        hidden
+      />
+    </label>
+
+    {/* Mobile Camera */}
+    {/*<label className="kyc-upload-btn camera">
+      {selfie ? '🤳 Selfie' : '📷 Camera'}
+
+      <input
+        type="file"
+        accept="image/png,image/jpeg,image/jpg"
+        capture={selfie ? 'user' : 'environment'}
+        onChange={handleFile(type)}
+        hidden
+      />
+    </label>*/}
+
+    {/* Desktop Webcam */}
+    <button
+      type="button"
+      className="kyc-upload-btn webcam"
+      onClick={() => openCamera(type)}
+    >
+      📷 Camera
+    </button>
+  </div>
+);
+
   // Status badge component
   const StatusBadge = ({ status }) => {
     const colors = {
@@ -451,7 +608,7 @@ export default function KYCPage({ navigate }) {
                     </>
                 }
               </label>
-              <input id="aadhar" type="file" accept="image/*" onChange={handleFile('aadhar')} hidden />
+              <UploadActions type="aadhar" />
               {preview.aadhar && <div className="kyc-check">✓ Uploaded</div>}
             </div>
 
@@ -467,7 +624,7 @@ export default function KYCPage({ navigate }) {
                     </>
                 }
               </label>
-              <input id="collegeId" type="file" accept="image/*" onChange={handleFile('collegeId')} hidden />
+              <UploadActions type="collegeId" />
               {preview.collegeId && <div className="kyc-check">✓ Uploaded</div>}
             </div>
 
@@ -484,7 +641,7 @@ export default function KYCPage({ navigate }) {
                       </>
                   }
                 </label>
-                <input id="license" type="file" accept="image/*" onChange={handleFile('license')} hidden />
+                <UploadActions type="license" />
                 {preview.license && <div className="kyc-check">✓ Uploaded</div>}
               </div>
             )}
@@ -532,40 +689,142 @@ export default function KYCPage({ navigate }) {
       )}
 
       {/* Step 1 — Selfie */}
-      {step === 1 && (
-        <div className="kyc-card fade-up">
-          <h3 className="heading mb-4" style={{ fontSize: 20 }}>Selfie Verification</h3>
-          <p className="text-muted mb-24 text-sm">Take a clear selfie to verify your identity</p>
-          <div className="kyc-selfie-box">
-            <label className="kyc-upload-label kyc-selfie-label" htmlFor="selfie">
-              {preview.selfie
-                ? <img src={preview.selfie} alt="Selfie" className="kyc-selfie-img" />
-                : <>
-                    <div className="kyc-upload-icon" style={{ fontSize: 40 }}>📷</div>
-                    <div className="kyc-upload-text">Click to take or upload selfie</div>
-                    <div className="kyc-upload-sub">Make sure your face is clearly visible</div>
-                  </>
-              }
-            </label>
-            <input id="selfie" type="file" accept="image/*" capture="user" onChange={handleFile('selfie')} hidden />
-          </div>
-          <div className="kyc-tips mt-24">
-            {['Good lighting on your face', 'No sunglasses or mask', 'Plain background preferred'].map(t => (
-              <div key={t} className="kyc-tip">✓ {t}</div>
-            ))}
-          </div>
-          <div className="flex gap-12 mt-32">
-            <button className="btn btn-outline btn-lg" onClick={() => setStep(0)}>Back</button>
-            <button
-              className="btn btn-primary btn-lg flex-1"
-              disabled={!preview.selfie}
-              onClick={() => setStep(2)}
+      {/* Step 1 — Selfie */}
+{step === 1 && (
+  <div className="kyc-card fade-up">
+
+    <h3
+      className="heading mb-4"
+      style={{ fontSize: 20 }}
+    >
+      Selfie Verification
+    </h3>
+
+    <p className="text-muted mb-24 text-sm">
+      Take a clear selfie to verify your identity
+    </p>
+
+    {/* SELFIE PREVIEW */}
+    <div className="kyc-selfie-box">
+
+      <div className="kyc-selfie-label">
+
+        {preview.selfie ? (
+          <img
+            src={preview.selfie}
+            alt="Selfie"
+            className="kyc-selfie-img"
+          />
+        ) : (
+          <div style={{ textAlign: 'center' }}>
+
+            <div
+              className="kyc-upload-icon"
+              style={{ fontSize: 40 }}
             >
-              Continue
-            </button>
+              📷
+            </div>
+
+            <div className="kyc-upload-text">
+              Selfie Preview
+            </div>
+
+            <div className="kyc-upload-sub">
+              Your selfie will appear here
+            </div>
+
           </div>
+        )}
+
+      </div>
+
+    </div>
+
+    {/* SELFIE ACTION BUTTONS */}
+    <UploadActions
+      type="selfie"
+      selfie
+    />
+
+    {/* TIPS */}
+    <div className="kyc-tips mt-24">
+
+      {[
+        'Good lighting on your face',
+        'No sunglasses or mask',
+        'Plain background preferred'
+      ].map(t => (
+        <div key={t} className="kyc-tip">
+          ✓ {t}
         </div>
-      )}
+      ))}
+
+    </div>
+
+    {/* BUTTONS */}
+    <div className="flex gap-12 mt-32">
+
+      <button
+        className="btn btn-outline btn-lg"
+        onClick={() => setStep(0)}
+      >
+        Back
+      </button>
+
+      <button
+        className="btn btn-primary btn-lg flex-1"
+        disabled={!preview.selfie}
+        onClick={() => setStep(2)}
+      >
+        Continue
+      </button>
+
+    </div>
+
+  </div>
+)}
+
+{/* CAMERA MODAL */}
+{cameraOpen && (
+  <div className="camera-modal">
+
+    <div className="camera-box">
+
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="camera-video"
+      />
+
+      <canvas
+        ref={canvasRef}
+        style={{ display: 'none' }}
+      />
+
+      <div className="camera-actions">
+
+        <button
+          className="btn btn-outline"
+          onClick={closeCamera}
+        >
+          Cancel
+        </button>
+
+        <button
+          className="btn btn-primary"
+          onClick={capturePhoto}
+        >
+          Capture
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+)}
 
       {/* Step 2 — Review & Submit */}
       {step === 2 && (

@@ -1,7 +1,6 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import LocationSearch from '../components/LocationSearch.jsx';
-import CollegeLocationSearch from '../components/CollegeLocationSearch.jsx';
 import * as api from '../services/api.js';
 import RideCard from '../components/RideCard.jsx';
 import './SearchRides.css';
@@ -9,64 +8,7 @@ import './SearchRides.css';
 export default function SearchRides({ navigate }) {
   const { user } = useAuth();
 
-  // Time-based location configuration
-  const getTimeBasedLocationConfig = () => {
-    const currentHour = new Date().getHours();
-    
-    // Morning to Noon (12 AM - 12 PM): Drop should be colleges, pickup should be general (no colleges)
-    if (currentHour >= 0 && currentHour < 12) {
-      return {
-        pickupIsCollege: false,
-        dropIsCollege: true,
-        message: "Drop locations has access only for colleges"
-      };
-    }
-    
-    // Afternoon to Midnight (12 PM - 12 AM): Pickup should be colleges
-    if (currentHour >= 12 && currentHour < 24) {
-      return {
-        pickupIsCollege: true,
-        dropIsCollege: false,
-        message: "Pickup locations has access only for colleges"
-      };
-    }
-    
-    // This should never be reached, but keeping for safety
-    return {
-      pickupIsCollege: true,
-      dropIsCollege: false,
-      message: ""
-    };
-  };
-
-  const [locationConfig, setLocationConfig] = useState(getTimeBasedLocationConfig());
-  const [pickupType, setPickupType] = useState('college'); // 'college' or 'home'
-
-  // Update location config every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-    }, 60000); // Update every minute
-
-    return () => clearInterval(interval);
-  }, [pickupType]);
-
-  // Get effective location config based on pickup type for seekers
-  const getEffectiveLocationConfig = () => {
-    if (pickupType === 'college') {
-      return {
-        pickupIsCollege: true,
-        dropIsCollege: false,
-        message: "Searching for rides picking up from colleges"
-      };
-    } else {
-      return {
-        pickupIsCollege: false,
-        dropIsCollege: true,
-        message: "Searching for rides picking up from home locations"
-      };
-    }
-  };
-
+  // Role validation: Only 'seeker' or 'both' can search rides
   const isSeeker = user?.role === 'seeker' || user?.role === 'both';
   if (!isSeeker) {
     return (
@@ -80,32 +22,13 @@ export default function SearchRides({ navigate }) {
       </div>
     );
   }
-  
-  const [filters, setFilters] = useState({ 
-    lat: '', 
-    lng: '', 
-    dropLat: '', 
-    dropLng: '', 
-    maxDistance: 5000, 
-    date: '',
-    pickupLabel: '',  // Store pickup location label
-    dropLabel: ''     // Store drop location label
-  });
-  
-  const [rides, setRides] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [filters,  setFilters]  = useState({ lat:'', lng:'', date:'', locationLabel:'' });
+  const [rides,    setRides]    = useState([]);
+  const [loading,  setLoading]  = useState(false);
   const [searched, setSearched] = useState(false);
-  const [error, setError] = useState('');
+  const [error,    setError]    = useState('');
   const [bookingMap, setBookingMap] = useState({});
-  
-  // ENHANCED: Smart suggestions state
-  const [suggestions, setSuggestions] = useState({
-    exactMatches: [],
-    expandedDistance: [],
-    expandedDate: [],
-    message: '',
-    showExpandOption: false
-  });
+  const [noMatchSuggestions, setNoMatchSuggestions] = useState(null);
 
   const set = k => e => setFilters(f => ({ ...f, [k]: e.target.value }));
 
@@ -120,217 +43,70 @@ export default function SearchRides({ navigate }) {
   const doSearch = useCallback(async e => {
     e?.preventDefault();
     setError('');
-    setSuggestions({ exactMatches: [], expandedDistance: [], expandedDate: [], message: '', showExpandOption: false });
-    
-    if (!filters.lat || !filters.lng) { 
-      setError('Enter or detect your pickup location first'); 
-      return; 
-    }
-    
+    setNoMatchSuggestions(null);
+    if (!filters.lat || !filters.lng) { setError('Enter or detect your location first'); return; }
     setLoading(true);
-    
     try {
-      console.log('Searching with filters:', filters);
-      
-      // 1. First try exact search
-      const searchParams = {
-        lat: parseFloat(filters.lat), 
-        lng: parseFloat(filters.lng),
-        maxDistance: parseInt(filters.maxDistance),
+      const data = await api.searchRides({
+        lat: filters.lat, lng: filters.lng,
+        maxDistance: 50000,
         date: filters.date || undefined,
-      };
-      
-      if (filters.dropLat && filters.dropLng) {
-        searchParams.dropLat = parseFloat(filters.dropLat);
-        searchParams.dropLng = parseFloat(filters.dropLng);
-      }
-      
-      const data = await api.searchRides(searchParams);
-      
-      console.log(`Found ${data.length} exact matches`);
-      
-      // 2. If few or no results, fetch smart suggestions
-      if (!data || data.length < 3) {
-        try {
-          const nearbyData = await api.findNearbySuggestions({
-            lat: filters.lat,
-            lng: filters.lng,
-            originalDistance: filters.maxDistance,
-            date: filters.date,
-            expandDistance: 'true',
-            expandDate: 'true'
-          });
-          
-          setSuggestions({
-            exactMatches: data || [],
-            expandedDistance: nearbyData.expandedDistance || [],
-            expandedDate: nearbyData.expandedDate || [],
-            message: nearbyData.message,
-            showExpandOption: (nearbyData.expandedDistance?.length > 0 || nearbyData.expandedDate?.length > 0)
-          });
-          
-          // If no exact matches but suggestions exist, show them
-          if ((!data || data.length === 0) && nearbyData.showSuggestions) {
-            // Don't set rides, let user choose to expand search
-          }
-        } catch (err) {
-          console.log('Nearby suggestions error:', err);
-        }
-      }
-      
+      });
       setRides(data);
       setSearched(true);
       setBookingMap({});
-      
+      // If no rides found, fetch suggestions
+      if (!data || data.length === 0) {
+        try {
+          const suggestions = await api.noMatchSuggest({ lat: filters.lat, lng: filters.lng });
+          setNoMatchSuggestions(suggestions);
+        } catch {}
+      }
     } catch (err) {
-      console.error('Search error:', err);
       setError(err.message || 'Search failed');
     } finally {
       setLoading(false);
     }
   }, [filters]);
 
-  // ENHANCED: Expand search to include suggested rides
-  const expandSearch = () => {
-    const allSuggestions = [
-      ...suggestions.exactMatches,
-      ...suggestions.expandedDistance,
-      ...suggestions.expandedDate
-    ];
-    setRides(allSuggestions);
-    setSuggestions(prev => ({ ...prev, showExpandOption: false }));
-  };
-
-  const book = async (rideId, seatsRequested = 1) => {
+  const book = async (rideId) => {
     setBookingMap(m => ({ ...m, [rideId]: { loading: true } }));
     try {
-      await api.requestBooking(rideId, seatsRequested);
+      await api.requestBooking(rideId);
       setBookingMap(m => ({ ...m, [rideId]: { status: 'pending' } }));
     } catch (err) {
       setBookingMap(m => ({ ...m, [rideId]: { error: err.message } }));
     }
   };
 
-  const formatDistance = (meters) => {
-    if (meters < 1000) return `${meters}m`;
-    return `${(meters / 1000).toFixed(1)}km`;
-  };
-
-  const formatDateDiff = (days) => {
-    if (days === 0) return 'Same day';
-    if (days === 1) return '1 day later';
-    if (days === -1) return '1 day earlier';
-    return `${Math.abs(days)} days ${days > 0 ? 'later' : 'earlier'}`;
-  };
-
   return (
     <div className="page-wrap fade-up">
       <p className="eyebrow mb-16">Seeker</p>
       <h1 className="heading mb-8" style={{fontSize:30}}>Find a Ride</h1>
-      <p className="text-muted mb-24 text-sm">Search rides from your pickup to your destination.</p>
+      <p className="text-muted mb-24 text-sm">Search rides near your location using geo-proximity matching.</p>
 
       <form className="search-box card" onSubmit={doSearch}>
         <div className="card-header">
           <span className="card-title">Search Filters</span>
         </div>
         <div className="card-body">
-          {/* ── Pickup Type Selection ── */}
-          <div className="field mb-32">
-            <label>Where do you want to be picked up from? *</label>
-            <div className="pickup-type-grid">
-              <button 
-                type="button"
-                className={`pickup-type-btn ${pickupType === 'college' ? 'selected' : ''}`}
-                onClick={() => setPickupType('college')}
-              >
-                <span className="icon">🏫</span>
-                <span className="text">College</span>
-              </button>
-              <button 
-                type="button"
-                className={`pickup-type-btn ${pickupType === 'home' ? 'selected' : ''}`}
-                onClick={() => setPickupType('home')}
-              >
-                <span className="icon">🏠</span>
-                <span className="text">Home</span>
-              </button>
-            </div>
-          </div>
-
-          {getEffectiveLocationConfig().message && (
-            <div className="alert alert-info mb-16" style={{background: 'rgba(34, 197, 94, 0.1)', border: '1px solid rgba(34, 197, 94, 0.3)', color: '#22c55e'}}>
-              <span style={{marginRight: 8}}>{pickupType === 'college' ? '🎓' : '🏠'}</span>
-              {getEffectiveLocationConfig().message}
-            </div>
-          )}
           {error && <div className="alert alert-error mb-16">{error}</div>}
-          
-          <div className="search-grid" style={{ display: 'grid', gap: '16px', gridTemplateColumns: '1fr 1fr' }}>
-            
-            {/* Pickup Location */}
+          <div className="search-grid">
             <div className="field" style={{marginBottom:0, gridColumn: '1 / -1'}}>
-              <label>Pickup Location *</label>
-              {getEffectiveLocationConfig().pickupIsCollege ? (
-                <CollegeLocationSearch
-                  value={filters.pickupLabel || ''}
-                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, pickupLabel: label, lat: lat.toString(), lng: lng.toString() }))}
-                  placeholder="Search for college pickup location..."
-                />
-              ) : (
-                <LocationSearch
-                  value={filters.pickupLabel || ''}
-                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, pickupLabel: label, lat: lat.toString(), lng: lng.toString() }))}
-                  placeholder="Search for your pickup location..."
-                  excludeColleges={true}
-                  showGeoButton={pickupType === 'home'}
-                />
-              )}
+              <label>Your Location</label>
+              <LocationSearch
+                value={filters.locationLabel || (filters.lat && filters.lng ? `${filters.lat}, ${filters.lng}` : '')}
+                onChange={(label, lat, lng) => setFilters(f => ({ ...f, lat: lat.toString(), lng: lng.toString(), locationLabel: label }))}
+                placeholder="Search area, college, landmark or address..."
+              />
             </div>
-            
-            {/* Drop Location */}
-            <div className="field" style={{marginBottom:0, gridColumn: '1 / -1'}}>
-              <label>Drop Location <span style={{color: 'rgba(255,255,255,0.4)', fontWeight: 400}}></span></label>
-              {getEffectiveLocationConfig().dropIsCollege ? (
-                <CollegeLocationSearch
-                  value={filters.dropLabel || ''}
-                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
-                  placeholder="Search for college destination..."
-                />
-              ) : (
-                <LocationSearch
-                  value={filters.dropLabel || ''}
-                  onChange={(label, lat, lng) => setFilters(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
-                  placeholder="Search for your destination ..."
-                  excludeColleges={true}
-                  showGeoButton={false}
-                />
-              )}
-              <span style={{fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4, display: 'block'}}>
-                Adding a destination helps find rides going your way
-              </span>
-            </div>
-            
-            {/* Max Distance */}
+
             <div className="field" style={{marginBottom:0}}>
-              <label>Max Distance</label>
-              <select className="input" value={filters.maxDistance} onChange={set('maxDistance')}>
-                <option value={1000}>1 km</option>
-                <option value={3000}>3 km</option>
-                <option value={5000}>5 km</option>
-                <option value={10000}>10 km</option>
-                <option value={25000}>25 km</option>
-                <option value={50000}>50 km</option>
-              </select>
-            </div>
-            
-            {/* Date */}
-            <div className="field" style={{marginBottom:0}}>
-              <label>Date</label>
+              <label>Date (optional)</label>
               <input className="input" type="date" min={new Date().toISOString().split('T')[0]}
                 value={filters.date} onChange={set('date')} />
             </div>
           </div>
-          
           <div className="search-actions">
             <button type="submit" className={`btn btn-primary ${loading ? 'btn-loading' : ''}`} disabled={loading}>
               {!loading && '🔍 Search Rides'}
@@ -352,149 +128,35 @@ export default function SearchRides({ navigate }) {
             )}
           </div>
 
-          {/* ENHANCED: Smart Suggestions UI */}
-          {rides.length === 0 && suggestions.showExpandOption && (
-            <div style={{
-              background: 'rgba(245,158,11,0.1)', 
-              border: '1px solid rgba(245,158,11,0.3)', 
-              borderRadius: 12, 
-              padding: 20, 
-              marginBottom: 24
-            }}>
-              <h4 style={{color: '#f59e0b', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8}}>
-                <span>💡</span> No exact matches found
-              </h4>
-              <p style={{color: 'rgba(255,255,255,0.7)', fontSize: 14, marginBottom: 16}}>
-                {suggestions.message}
-              </p>
-              
-              {/* Show preview of expanded distance matches */}
-              {suggestions.expandedDistance.length > 0 && (
-                <div style={{marginBottom: 16}}>
-                  <p style={{fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em'}}>
-                    Within {formatDistance(Math.max(...suggestions.expandedDistance.map(r => r.actualDistance * 1000)))} of you:
-                  </p>
-                  {suggestions.expandedDistance.slice(0, 3).map(ride => (
-                    <div key={ride._id} style={{
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'space-between',
-                      padding: '10px 12px',
-                      background: 'rgba(255,255,255,0.05)',
-                      borderRadius: 8,
-                      marginBottom: 8,
-                      fontSize: 13
-                    }}>
-                      <span>{ride.pickup?.address || 'Unknown'} → {ride.drop?.address || 'Unknown'}</span>
-                      <span style={{color: '#f59e0b', fontWeight: 600}}>{ride.actualDistance}km away</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Show preview of expanded date matches */}
-              {suggestions.expandedDate.length > 0 && (
-                <div style={{marginBottom: 16}}>
-                  <p style={{fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em'}}>
-                    Nearby dates:
-                  </p>
-                  {suggestions.expandedDate.slice(0, 3).map(ride => (
-                    <div key={ride._id} style={{
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'space-between',
-                      padding: '10px 12px',
-                      background: 'rgba(255,255,255,0.05)',
-                      borderRadius: 8,
-                      marginBottom: 8,
-                      fontSize: 13
-                    }}>
-                      <span>{ride.pickup?.address || 'Unknown'}</span>
-                      <span style={{color: '#6c63ff', fontWeight: 600}}>
-                        {new Date(ride.date).toLocaleDateString('en-IN', {day:'numeric', month:'short'})} 
-                        ({formatDateDiff(ride.daysFromTarget)})
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <button 
-                className="btn btn-primary" 
-                onClick={expandSearch}
-                style={{width: '100%'}}
-              >
-                Show {suggestions.expandedDistance.length + suggestions.expandedDate.length} nearby options
-              </button>
-              
-              <button 
-                className="btn btn-ghost btn-sm mt-12" 
-                onClick={() => navigate('route-alerts')}
-                style={{width: '100%'}}
-              >
-                Or create an alert to get notified
-              </button>
-            </div>
-          )}
-
-          {/* No results and no suggestions */}
-          {rides.length === 0 && !suggestions.showExpandOption && (
+          {rides.length === 0 ? (
             <div>
               <div className="empty-state">
                 <div className="empty-icon">🚗</div>
                 <div className="empty-title">No rides nearby</div>
-                <div className="empty-sub mt-8">Try a larger distance radius or different date.</div>
+                <div className="empty-sub mt-8">No rides found nearby. Try a different location or date, or check back later.</div>
               </div>
 
-              <div style={{background:'#1a1a2e', border:'1px solid #6c63ff44', borderRadius:12, padding:20, marginTop:20}}>
-                <h4 style={{color:'#6c63ff', marginBottom:12}}>What you can do instead:</h4>
-                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid #222'}}>
-                  <span style={{color:'#ccc', fontSize:14}}>Get notified when rides match</span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => navigate('route-alerts')}>
-                    Create Alert
-                  </button>
+              {/* No-match suggestions */}
+              {noMatchSuggestions && (
+                <div style={{background:'#1a1a2e', border:'1px solid #6c63ff44', borderRadius:12, padding:20, marginTop:20}}>
+                  <h4 style={{color:'#6c63ff', marginBottom:12}}>What you can do instead:</h4>
+                  {noMatchSuggestions.suggestions?.map((s, i) => (
+                    <div key={i} style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid #222'}}>
+                      <span style={{color:'#ccc', fontSize:14}}>{s.label}</span>
+                      <button className="btn btn-ghost btn-sm" onClick={() => navigate(s.action === 'subscribe_alert' ? 'route-alerts' : 'route-alerts')}>
+                        {s.action === 'subscribe_alert' ? 'Subscribe' : 'Post Request'}
+                      </button>
+                    </div>
+                  ))}
                 </div>
-                <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0'}}>
-                  <span style={{color:'#ccc', fontSize:14}}>Post a ride request</span>
-                  <button className="btn btn-ghost btn-sm" onClick={() => navigate('route-alerts')}>
-                    Post Request
-                  </button>
-                </div>
-              </div>
+              )}
             </div>
-          )}
-
-          {/* Results list */}
-          {rides.length > 0 && (
+          ) : (
             <div className="rides-stack">
-              {rides.filter(ride => (ride.seatsAvailable ?? 0) > 0).map(ride => {
+              {rides.map(ride => {
                 const bm = bookingMap[ride._id];
-                // Check if this is a suggested ride (not exact match)
-                const isSuggested = suggestions.expandedDistance.some(r => r._id === ride._id) || 
-                                   suggestions.expandedDate.some(r => r._id === ride._id);
-                
                 return (
                   <div key={ride._id}>
-                    {isSuggested && (
-                      <div style={{
-                        padding: '6px 12px',
-                        background: 'rgba(245,158,11,0.1)',
-                        borderRadius: '8px 8px 0 0',
-                        fontSize: 11,
-                        color: '#f59e0b',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6
-                      }}>
-                        <span>💡</span>
-                        {suggestions.expandedDistance.find(r => r._id === ride._id)?.actualDistance && (
-                          <span>{suggestions.expandedDistance.find(r => r._id === ride._id).actualDistance}km from your search</span>
-                        )}
-                        {suggestions.expandedDate.find(r => r._id === ride._id)?.daysFromTarget !== 0 && (
-                          <span>{formatDateDiff(suggestions.expandedDate.find(r => r._id === ride._id).daysFromTarget)}</span>
-                        )}
-                      </div>
-                    )}
                     <RideCard
                       ride={ride}
                       onView={id => navigate('ride-detail', { rideId: id })}

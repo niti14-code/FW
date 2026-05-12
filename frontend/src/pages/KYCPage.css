@@ -184,3 +184,108 @@
   border: 2px dashed #dc3545;
   border-radius: 14px;
 }
+
+.kyc-upload-actions{
+  display:flex;
+  gap:10px;
+  margin-top:14px;
+  width:100%;
+}
+
+.kyc-upload-btn{
+  flex:1;
+  border:none;
+  padding:12px;
+  border-radius:12px;
+  cursor:pointer;
+  font-size:13px;
+  font-weight:600;
+  text-align:center;
+  background:#1f2937;
+  color:white;
+  transition:0.2s;
+}
+
+.kyc-upload-btn:hover{
+  transform:translateY(-1px);
+}
+
+.kyc-upload-btn.camera{
+  background:#f5a623;
+  color:black;
+}
+
+.kyc-upload-btn.webcam{
+  background:#f5a623;
+  color:black;
+}
+
+.camera-modal{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.85);
+  z-index:9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+}
+
+.camera-box{
+  background:#111827;
+  border-radius:20px;
+  padding:20px;
+  width:100%;
+  max-width:700px;
+}
+
+.camera-video{
+  width:100%;
+  border-radius:16px;
+  background:black;
+}
+
+.camera-actions{
+  display:flex;
+  gap:12px;
+  margin-top:20px;
+}
+
+@media(max-width:600px){
+  .kyc-upload-actions{
+    flex-direction:column;
+  }
+}
+
+.camera-modal{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.85);
+  z-index:9999;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:20px;
+}
+
+.camera-box{
+  background:#111827;
+  border-radius:20px;
+  padding:20px;
+  width:100%;
+  max-width:700px;
+}
+
+.camera-video{
+  width:100%;
+  min-height:400px;
+  background:black;
+  border-radius:16px;
+  object-fit:cover;
+}
+
+.camera-actions{
+  display:flex;
+  gap:12px;
+  margin-top:20px;
+}
