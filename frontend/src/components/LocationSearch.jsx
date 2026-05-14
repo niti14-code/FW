@@ -1,109 +1,94 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import * as api from '../services/api.js';
 import './LocationSearch.css';
 
-export default function LocationSearch({ 
-  value, 
-  onChange, 
+export default function LocationSearch({
   placeholder = 'Search for a location...',
+  onChange,
   onLocationSelect,
   className = ''
 }) {
-  const [query, setQuery] = useState(value || '');
-  const [suggestions, setSuggestions] = useState([]);
+  const [query, setQuery]               = useState('');
+  const [suggestions, setSuggestions]   = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [geoLoading, setGeoLoading] = useState(false);
+  const [loading, setLoading]           = useState(false);
+  const [geoLoading, setGeoLoading]     = useState(false);
 
-  const inputRef = useRef(null);
   const suggestionsRef = useRef(null);
-  const debounceTimer = useRef(null);
+  const debounceTimer  = useRef(null);
 
-  // Debounced search
-  const debouncedSearch = useCallback(async (searchQuery) => {
-    if (searchQuery.length < 2) {
-      setSuggestions([]);
-      setShowSuggestions(false);
-      return;
-    }
+  // ── Debounced search ──────────────────────────────────────────
+  const debouncedSearch = useCallback(async (q) => {
+    if (q.length < 2) { setSuggestions([]); setShowSuggestions(false); return; }
     setLoading(true);
     try {
-      const results = await api.searchLocation(searchQuery);
+      const results = await api.searchLocation(q);
       setSuggestions(results);
       setShowSuggestions(true);
-    } catch (error) {
-      console.error('Search failed:', error);
+    } catch {
       setSuggestions([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  const handleSearch = (searchQuery) => {
-    setQuery(searchQuery);
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => debouncedSearch(searchQuery), 300);
+  const handleSearch = (val) => {
+    setQuery(val);
+    clearTimeout(debounceTimer.current);
+    debounceTimer.current = setTimeout(() => debouncedSearch(val), 300);
   };
 
+  // ── Select from dropdown ──────────────────────────────────────
   const handleSelect = (location) => {
-    const displayText = location.label || location.display_name?.split(',').slice(0, 2).join(',').trim() || 'Selected Location';
-    setQuery(displayText);
+    const label = location.label || location.display_name?.split(',').slice(0, 2).join(',').trim() || 'Selected Location';
+    setQuery(label);
     setShowSuggestions(false);
     setSuggestions([]);
-    if (onChange)         onChange(displayText, location.lat, location.lng);
-    if (onLocationSelect) onLocationSelect({ ...location, label: displayText });
+    onChange?.(label, location.lat, location.lng);
+    onLocationSelect?.({ ...location, label });
   };
 
-  // Tap 📍 → detect GPS → reverse geocode → fill address directly, no popup
+  // ── GPS detect ────────────────────────────────────────────────
   const handleGeolocation = () => {
-    if (!navigator.geolocation) {
-      alert('Geolocation is not supported by your browser');
-      return;
-    }
-
+    if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
     setGeoLoading(true);
     setQuery('Detecting your location…');
 
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
+      async ({ coords: { latitude, longitude } }) => {
         try {
           const address = await api.reverseGeocode(latitude, longitude);
           const label = address.label || address.display_name || 'My Location';
           setQuery(label);
-          if (onChange)         onChange(label, latitude, longitude);
-          if (onLocationSelect) onLocationSelect({ label, display_name: address.display_name, lat: latitude, lng: longitude });
+          onChange?.(label, latitude, longitude);
+          onLocationSelect?.({ label, display_name: address.display_name, lat: latitude, lng: longitude });
         } catch {
           setQuery('My Location');
-          if (onChange) onChange('My Location', latitude, longitude);
+          onChange?.('My Location', latitude, longitude);
         } finally {
           setGeoLoading(false);
         }
       },
-      (error) => {
-        console.error('Geolocation error:', error);
+      () => {
         setQuery('');
         setGeoLoading(false);
         alert('Could not get your location. Please search manually.');
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   };
 
+  // ── Close on outside click ────────────────────────────────────
   useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (suggestionsRef.current && !suggestionsRef.current.contains(event.target)) {
+    const handler = (e) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target)) {
         setShowSuggestions(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', handler);
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      if (debounceTimer.current) clearTimeout(debounceTimer.current);
+      document.removeEventListener('mousedown', handler);
+      clearTimeout(debounceTimer.current);
     };
   }, []);
 
@@ -111,7 +96,6 @@ export default function LocationSearch({
     <div className={`location-search ${className}`}>
       <div className="location-input-wrapper">
         <input
-          ref={inputRef}
           type="text"
           value={query}
           onChange={(e) => handleSearch(e.target.value)}
@@ -135,21 +119,19 @@ export default function LocationSearch({
         <div className="location-suggestions" ref={suggestionsRef}>
           {loading ? (
             <div className="suggestion-loading">
-              <div className="loading-spinner"></div>
+              <div className="loading-spinner" />
               <span>Searching locations...</span>
             </div>
           ) : suggestions.length > 0 ? (
-            suggestions.map((suggestion, index) => {
-              const mainLabel = suggestion.label || suggestion.display_name?.split(',')[0];
-              const subLabel  = suggestion.display_name;
+            suggestions.map((s, i) => {
+              const main = s.label || s.display_name?.split(',')[0];
+              const sub  = s.display_name;
               return (
-                <div key={index} className="suggestion-item" onClick={() => handleSelect(suggestion)}>
+                <div key={i} className="suggestion-item" onClick={() => handleSelect(s)}>
                   <div className="suggestion-icon">📍</div>
                   <div className="suggestion-body">
-                    <div className="suggestion-main">{mainLabel}</div>
-                    {subLabel && subLabel !== mainLabel && (
-                      <div className="suggestion-sub">{subLabel}</div>
-                    )}
+                    <div className="suggestion-main">{main}</div>
+                    {sub && sub !== main && <div className="suggestion-sub">{sub}</div>}
                   </div>
                 </div>
               );

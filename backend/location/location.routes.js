@@ -3,7 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 
 // Proxy for location search (avoids CORS issues in frontend)
-router.get('/search', auth, async (req, res) => {
+/*router.get('/search', auth, async (req, res) => {
   try {
     const { q } = req.query;
     if (!q || q.length < 2) {
@@ -35,6 +35,61 @@ router.get('/search', auth, async (req, res) => {
   } catch (error) {
     console.error('Location search error:', error);
     res.status(500).json({ message: 'Location search failed' });
+  }
+});*/
+router.get('/search', auth, async (req, res) => {
+  try {
+
+    const { q } = req.query;
+
+    if (!q || q.length < 2) {
+      return res.json([]);
+    }
+
+    const response = await fetch(
+      `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8`
+    );
+
+    if (!response.ok) {
+      throw new Error('Photon API failed');
+    }
+
+    const data = await response.json();
+
+    const results = data.features.map(place => ({
+
+      display_name: [
+        place.properties.name,
+        place.properties.street,
+        place.properties.city,
+        place.properties.state,
+        place.properties.country
+      ]
+        .filter(Boolean)
+        .join(', '),
+
+      lat: Number(place.geometry.coordinates[1].toFixed(3)),
+
+      lng: Number(place.geometry.coordinates[0].toFixed(3)),
+
+      label:
+        place.properties.name ||
+        place.properties.street ||
+        place.properties.city ||
+        'Unknown Location'
+
+    }));
+
+    res.json(results);
+
+  } catch (error) {
+
+    console.error('Location search error:', error);
+
+    res.status(500).json({
+      message: 'Location search failed'
+    });
+
   }
 });
 
@@ -114,6 +169,45 @@ router.get('/reverse', auth, async (req, res) => {
   } catch (error) {
     console.error('Reverse geocode error:', error);
     res.status(500).json({ message: 'Reverse geocode failed' });
+  }
+});
+
+router.get('/reverse', auth, async (req, res) => {
+  try {
+    const { lat, lng } = req.query;
+
+    const response = await fetch(
+      `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`
+    );
+
+    const data = await response.json();
+
+    const place = data.features?.[0];
+
+    if (!place) {
+      return res.json({
+        display_name: 'Current Location'
+      });
+    }
+     const address = [
+      place.properties.name,
+      place.properties.street,
+      place.properties.city,
+      place.properties.state
+    ]
+      .filter(Boolean)
+      .join(', ');
+
+    res.json({
+      display_name: address
+    });
+
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      message: 'Reverse geocode failed'
+    });
   }
 });
 

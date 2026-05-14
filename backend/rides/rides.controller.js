@@ -9,10 +9,16 @@ exports.createRide = async (req, res) => {
   try {
     const { pickup, drop, date, time, seatsAvailable, costPerSeat } = req.body;
 
-    // DEBUG: Log what backend receives
-    console.log('=== BACKEND RECEIVED ===');
-    console.log('Pickup received:', pickup);
-    console.log('Drop received:', drop);
+    // Validate coordinates
+    if (!Array.isArray(pickup?.coordinates) || pickup.coordinates.length !== 2 ||
+        !Array.isArray(drop?.coordinates)   || drop.coordinates.length !== 2) {
+      return res.status(400).json({ message: 'Valid pickup and drop coordinates are required' });
+    }
+
+    // Validate seats
+    if (!seatsAvailable || seatsAvailable < 1 || seatsAvailable > 6) {
+      return res.status(400).json({ message: 'Seats must be between 1 and 6' });
+    }
 
     const userId = req.user?.userId || req.user?.id;
     const user = await User.findById(userId);
@@ -25,12 +31,8 @@ exports.createRide = async (req, res) => {
       return res.status(403).json({ message: 'KYC not approved' });
     }
 
-    // FIXED: Properly extract address from frontend data
-    // Frontend sends: { coordinates: [lng, lat], address: 'Location Name' }
     const pickupAddress = pickup?.address || pickup?.label || 'Unknown Location';
     const dropAddress = drop?.address || drop?.label || 'Unknown Location';
-
-    console.log('Extracted addresses:', { pickupAddress, dropAddress });
 
     const ride = new Ride({
       providerId: userId,
@@ -90,11 +92,6 @@ for (const alert of alerts) {
     console.error('Alert match error:', err);
   }
 }
-
-    // DEBUG: Log what was saved
-    console.log('=== RIDE SAVED ===');
-    console.log('Saved pickup:', ride.pickup);
-    console.log('Saved drop:', ride.drop);
 
     res.status(201).json({
       message: 'Ride created successfully',
@@ -388,6 +385,11 @@ exports.dropPassenger = async (req, res) => {
     });
 
     if (!ride) return res.status(404).json({ message: 'Ride not found' });
+
+    // Only allow drop if ride is in-progress
+    if (ride.status !== 'in-progress') {
+      return res.status(400).json({ message: 'Ride is not in progress' });
+    }
 
     ride.status = 'completed';
     ride.passengerDroppedAt = new Date();

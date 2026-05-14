@@ -77,45 +77,23 @@ function findLocationByCoords(coords) {
 
 function useLocationName(locationField) {
   const [name, setName] = useState('');
-  
   useEffect(() => {
-    if (!locationField) {
-      setName('Unknown location');
-      return;
-    }
-    
-    // DEBUG
-    console.log('useLocationName received:', locationField);
-    
-    // Check if we have a stored address (from new rides)
+    if (!locationField) { setName('Unknown location'); return; }
     const storedAddress = locationField.address?.trim();
     if (storedAddress && storedAddress.length > 0 && storedAddress !== 'Unknown Location') {
-      console.log('Using stored address:', storedAddress);
       setName(storedAddress);
       return;
     }
-    
-    // Try to match coordinates with fallback database
     const coords = locationField.coordinates;
     if (Array.isArray(coords) && coords.length === 2) {
       const fallbackName = findLocationByCoords(coords);
-      if (fallbackName) {
-        console.log('Using fallback match:', fallbackName);
-        setName(fallbackName);
-        return;
-      }
-      
-      // Last resort: show coordinates in readable format
+      if (fallbackName) { setName(fallbackName); return; }
       const [lng, lat] = coords;
-      const coordString = `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-      console.log('Using coordinate string:', coordString);
-      setName(coordString);
+      setName(`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`);
     } else {
-      console.log('No coordinates found');
       setName('Unknown location');
     }
   }, [locationField]);
-  
   return name;
 }
 

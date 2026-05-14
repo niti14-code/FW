@@ -41,7 +41,7 @@ const EMPTY = {
 };
 
 const VEHICLE_TYPES = [
-  { value: 'motorcycle', label: '🏍 Motorcycle', capacity: 1 },
+  { value: 'motorcycle', label: '🏍 Bike', capacity: 1 },
   { value: 'car', label: '🚗 Car', capacity: 3 },
   { value: 'suv', label: '🚙 SUV', capacity: 4 },
   { value: 'xuv', label: '🚐 XUV', capacity: 6 }
@@ -122,11 +122,25 @@ export default function CreateRide({ navigate }) {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [success, setSuccess] = useState(null);
   const [pickupType, setPickupType] = useState('');
+  const [scheduleType, setScheduleType] = useState(''); // 'now' or 'later'
   const [locationConfig, setLocationConfig] = useState(getLocationConfig(''));
-    // Update location config when pickup type changes
+
+  // Update location config when pickup type changes
   useEffect(() => {
     setLocationConfig(getLocationConfig(pickupType));
   }, [pickupType]);
+
+  // When "Book Now" is selected, auto-fill current date and time
+  useEffect(() => {
+    if (scheduleType === 'now') {
+      const now = new Date();
+      const date = now.toISOString().split('T')[0];
+      const time = now.toTimeString().slice(0, 5); // HH:MM
+      setForm(f => ({ ...f, date, time }));
+    } else if (scheduleType === 'later') {
+      setForm(f => ({ ...f, date: '', time: '' }));
+    }
+  }, [scheduleType]);
 
   const isProvider = user?.role === 'provider' || user?.role === 'both';
   if (!isProvider) {
@@ -160,10 +174,12 @@ export default function CreateRide({ navigate }) {
       const validate = () => {
         if (!form.pickupLat || !form.pickupLng) return 'Set pickup coordinates';
         if (!form.dropLat   || !form.dropLng)   return 'Set drop coordinates';
+        if (form.pickupLat === form.dropLat && form.pickupLng === form.dropLng) return 'Pickup and drop location cannot be the same';
         if (!form.date) return 'Date is required';
         if (!form.time) return 'Time is required';
-        if (new Date(`${form.date}T${form.time}`) < new Date()) return 'Date/time must be in the future';
-        if (!pickupType) return 'Please select College or Home first for better ride creation!';
+        // Only check future date for scheduled rides, not "now"
+        if (scheduleType === 'later' && new Date(`${form.date}T${form.time}`) < new Date()) return 'Date/time must be in the future';
+        if (!pickupType) return 'Please select College or Home pickup type';
         return null;
       };
       const validationError = validate();
@@ -183,7 +199,7 @@ export default function CreateRide({ navigate }) {
         },
         date: new Date(`${form.date}T${form.time}`).toISOString(),
         time: form.time,
-        seatsAvailable: Number(form.seatsAvailable),
+        seatsAvailable: form.vehicleType === 'motorcycle' ? 1 : Number(form.seatsAvailable),
         costPerSeat: calculateCostPerSeat(
           parseFloat(form.pickupLat),
           parseFloat(form.pickupLng),
@@ -232,10 +248,9 @@ export default function CreateRide({ navigate }) {
       <p className="text-muted mb-28 text-sm">Set your route. Seekers near your pickup will find your ride.</p>
 
       <form onSubmit={submit}>
-        {error && <div className="alert alert-error mb-20">{error}</div>}
         {locationConfig.message && (
           <div className="alert alert-info mb-20">
-            ¡ {locationConfig.message}
+            ℹ️ {locationConfig.message}
           </div>
         )}
 
@@ -243,7 +258,7 @@ export default function CreateRide({ navigate }) {
         <div className="field mb-32">
           <label>Where are you picking up from? *</label>
           <div className="pickup-type-grid">
-            <button 
+            <button
               type="button"
               className={`pickup-type-btn ${pickupType === 'college' ? 'selected' : ''}`}
               onClick={() => setPickupType('college')}
@@ -251,7 +266,7 @@ export default function CreateRide({ navigate }) {
               <span className="icon">🏫</span>
               <span className="text">College</span>
             </button>
-            <button 
+            <button
               type="button"
               className={`pickup-type-btn ${pickupType === 'home' ? 'selected' : ''}`}
               onClick={() => setPickupType('home')}
@@ -271,6 +286,7 @@ export default function CreateRide({ navigate }) {
             <label>Pickup Location *</label>
             {locationConfig.pickupIsCollege ? (
               <CollegeLocationSearch
+                key="pickup-college"
                 value={form.pickupLabel}
                 onChange={(label, lat, lng) => setForm(f => ({ ...f, pickupLabel: label, pickupLat: lat.toString(), pickupLng: lng.toString() }))}
                 placeholder="Search for college pickup..."
@@ -278,12 +294,10 @@ export default function CreateRide({ navigate }) {
               />
             ) : (
               <LocationSearch
-                value={form.pickupLabel}
+                key="pickup-location"
                 onChange={(label, lat, lng) => setForm(f => ({ ...f, pickupLabel: label, pickupLat: lat.toString(), pickupLng: lng.toString() }))}
                 placeholder="Search for pickup location..."
                 className="mb-12"
-                excludeColleges={true}
-                showGeoButton={pickupType === 'home'}
               />
             )}
           </div>
@@ -298,6 +312,7 @@ export default function CreateRide({ navigate }) {
             <label>Drop Location *</label>
             {locationConfig.dropIsCollege ? (
               <CollegeLocationSearch
+                key="drop-college"
                 value={form.dropLabel}
                 onChange={(label, lat, lng) => setForm(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
                 placeholder="Search for college drop..."
@@ -305,32 +320,69 @@ export default function CreateRide({ navigate }) {
               />
             ) : (
               <LocationSearch
-                value={form.dropLabel}
+                key="drop-location"
                 onChange={(label, lat, lng) => setForm(f => ({ ...f, dropLabel: label, dropLat: lat.toString(), dropLng: lng.toString() }))}
                 placeholder="Search for drop location..."
                 className="mb-12"
-                excludeColleges={locationConfig.dropExcludeColleges}
-                showGeoButton={false}
               />
             )}
           </div>
         </div>
 
-        {/* ── Date / Time / Cost ── */}
-        <div className="grid-3 mb-20">
-          <div className="field" style={{marginBottom:0}}>
-            <label>Date ✶</label>
-            <input className="input" type="date" min={new Date().toISOString().split('T')[0]} value={form.date} onChange={set('date')} required />
-          </div>
-          <div className="field" style={{marginBottom:0}}>
-            <label>Time ✶</label>
-            <input className="input" type="time" value={form.time} onChange={set('time')} required />
-          </div>
-          <div className="field" style={{marginBottom:0}}>
-            <label>Seats Available ✶</label>
-            <input className="input" type="number" min="1" max="6" value={form.seatsAvailable} onChange={set('seatsAvailable')} required />
+        {/* ── Schedule Type ── */}
+        <div className="field mb-24">
+          <label>When is the ride? *</label>
+          <div className="pickup-type-grid">
+            <button
+              type="button"
+              className={`pickup-type-btn ${scheduleType === 'now' ? 'selected' : ''}`}
+              onClick={() => setScheduleType('now')}
+            >
+              <span className="icon">⚡</span>
+              <span className="text">Ride Now</span>
+            </button>
+            <button
+              type="button"
+              className={`pickup-type-btn ${scheduleType === 'later' ? 'selected' : ''}`}
+              onClick={() => setScheduleType('later')}
+            >
+              <span className="icon">📅</span>
+              <span className="text">Schedule Later</span>
+            </button>
           </div>
         </div>
+
+        {/* ── Date / Time — only shown for scheduled rides ── */}
+        {scheduleType === 'later' && (
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}} className="mb-20">
+            <div className="field" style={{marginBottom:0}}>
+              <label>Date ✶</label>
+              <input className="input" type="date" min={new Date().toISOString().split('T')[0]} value={form.date} onChange={set('date')} required />
+            </div>
+            <div className="field" style={{marginBottom:0}}>
+              <label>Time ✶</label>
+              <input className="input" type="time" value={form.time} onChange={set('time')} required />
+            </div>
+          </div>
+        )}
+
+        {/* ── Ride Now: show auto-detected date & time as read-only ── */}
+        {scheduleType === 'now' && (
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12}} className="mb-20">
+            <div className="field" style={{marginBottom:0}}>
+              <label>📅 Date</label>
+              <div className="input" style={{background:'rgba(255,255,255,0.04)', color:'rgba(255,255,255,0.5)', cursor:'default'}}>
+                {form.date ? new Date(form.date).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'}) : '—'}
+              </div>
+            </div>
+            <div className="field" style={{marginBottom:0}}>
+              <label>🕐 Time</label>
+              <div className="input" style={{background:'rgba(255,255,255,0.04)', color:'rgba(255,255,255,0.5)', cursor:'default'}}>
+                {form.time || '—'}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Vehicle Type ── */}
         <div className="field mb-20">
@@ -340,16 +392,17 @@ export default function CreateRide({ navigate }) {
               const labelParts = vehicle.label.split(' ');
               const icon = labelParts[0];
               const name = labelParts.slice(1).join(' ');
-              
               return (
-                <div 
+                <div
                   key={vehicle.value}
                   className={`vehicle-type-card ${form.vehicleType === vehicle.value ? 'selected' : ''}`}
                   onClick={() => setForm(f => ({ ...f, vehicleType: vehicle.value, seatsAvailable: vehicle.capacity }))}
                 >
                   <div className="vehicle-icon">{icon}</div>
                   <div className="vehicle-name">{name}</div>
-                  <div className="vehicle-capacity">Max {vehicle.capacity} seats</div>
+                  <div className="vehicle-capacity">
+                    Max {vehicle.capacity} seat{vehicle.capacity > 1 ? 's' : ''}
+                  </div>
                 </div>
               );
             })}
@@ -363,13 +416,9 @@ export default function CreateRide({ navigate }) {
             <div className="cost-amount">₹{calculatedCost}</div>
             <div className="cost-info">
               {calculatedCost > 0 ? (
-                <span className="text-muted text-sm">
-                  Based on distance and vehicle type
-                </span>
+                <span className="text-muted text-sm">Based on distance and vehicle type</span>
               ) : (
-                <span className="text-muted text-sm">
-                  Set pickup and drop locations to calculate cost
-                </span>
+                <span className="text-muted text-sm">Set pickup and drop locations to calculate cost</span>
               )}
             </div>
           </div>
@@ -385,6 +434,9 @@ export default function CreateRide({ navigate }) {
             <div className="earn-amount">₹{maxEarnings}</div>
           </div>
         )}
+
+        {/* ── Error shown near submit button ── */}
+        {error && <div className="alert alert-error mb-12">{error}</div>}
 
         <button type="submit" className={`btn btn-primary btn-lg btn-full ${loading ? 'btn-loading' : ''}`} disabled={loading}>
           {!loading && '🚗 Post Ride'}

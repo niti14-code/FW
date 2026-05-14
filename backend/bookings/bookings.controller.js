@@ -30,12 +30,12 @@ exports.requestBooking = async (req, res) => {
     }
 
     // Create booking
-    const requestedSeats = seats || 1;
+    const requestedSeats = Math.max(1, parseInt(seats) || 1);
 
-// Validate seats
-if (ride.seatsAvailable < requestedSeats) {
-  return res.status(400).json({ message: 'Not enough seats available' });
-}
+    // Validate seats
+    if (requestedSeats < 1 || requestedSeats > ride.seatsAvailable) {
+      return res.status(400).json({ message: `Invalid seat count. Available: ${ride.seatsAvailable}` });
+    }
 
 // Create booking WITH seats
 const booking = new Booking({
@@ -218,11 +218,13 @@ exports.respondBooking = async (req, res) => {
       return res.status(403).json({ message: 'Not authorized to respond to this booking' });
     }
 
-    // If rejecting, restore the seat
-    if (status === 'rejected' && booking.status !== 'rejected') {
-      const ride = await Ride.findById(booking.rideId);
-      ride.seatsAvailable += booking.seats || 1;
-      await ride.save();
+    // If rejecting, restore the seat — only if not already rejected
+    if (status === 'rejected' && booking.status === 'pending') {
+      const ride = await Ride.findById(booking.rideId._id);
+      if (ride) {
+        ride.seatsAvailable += booking.seats || 1;
+        await ride.save();
+      }
     }
 
     booking.status = status;
@@ -332,7 +334,7 @@ exports.getBookingsForRide = async (req, res) => {
     }
 
     const bookings = await Booking.find({ rideId })
-      .populate('seekerId', 'name phone rating')
+      .populate('seekerId', 'name phone rating college')
       .sort({ createdAt: -1 });
 
     res.json(bookings);

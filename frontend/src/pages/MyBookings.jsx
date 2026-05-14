@@ -5,37 +5,22 @@ import io from 'socket.io-client';
 import RideTracker from './RideTracker.jsx';
 import './SharedPages.css';
 
-// ── Shared geocode cache (same logic as RideCard / RideDetail) ──────
-const geoCache = new Map();
-async function reverseGeocode([lng, lat]) {
-  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
-  if (geoCache.has(key)) return geoCache.get(key);
-  try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-      { headers: { 'Accept-Language': 'en' } }
-    );
-    const d = await r.json();
-    const a = d.address || {};
-    const name = a.amenity || a.building || a.neighbourhood || a.suburb ||
-      a.village || a.city_district || a.city || a.town ||
-      d.display_name?.split(',')[0] ||
-      `${lat.toFixed(4)}°N ${lng.toFixed(4)}°E`;
-    geoCache.set(key, name);
-    return name;
-  } catch {
-    return `${lat.toFixed(4)}°N ${lng.toFixed(4)}°E`;
-  }
-}
-
 function useLocationName(locationField) {
   const [name, setName] = useState('');
   useEffect(() => {
     if (!locationField) return;
-    if (locationField.address?.trim()) { setName(locationField.address.trim()); return; }
+    // Use stored address first (always available for new rides)
+    if (locationField.address?.trim()) {
+      setName(locationField.address.trim());
+      return;
+    }
+    // Fallback: reverse geocode via backend proxy
     if (locationField.coordinates?.length === 2) {
       setName('…');
-      reverseGeocode(locationField.coordinates).then(setName);
+      const [lng, lat] = locationField.coordinates;
+      api.reverseGeocode(lat, lng)
+        .then(r => setName(r.label || r.display_name || '…'))
+        .catch(() => setName(`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`));
     }
   }, [locationField]);
   return name;
@@ -91,12 +76,9 @@ export default function MyBookings({ navigate }) {
     newSocket.on('rideCancelled', (data) => {
       console.log('Ride cancelled received:', data);
       alert(`Ride has been cancelled by provider. Reason: ${data.reason || 'No reason provided'}`);
-      
-      // Refresh bookings list
       fetchBookings();
-      
-      // Close tracker if open
-      if (tracking && tracking.rideId?._id === data.rideId) {
+      // Fix: compare both as strings to handle ObjectId vs string mismatch
+      if (tracking && String(tracking.rideId?._id || tracking.rideId) === String(data.rideId)) {
         setTracking(null);
       }
     });

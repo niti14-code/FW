@@ -8,7 +8,6 @@ import './SearchRides.css';
 export default function SearchRides({ navigate }) {
   const { user } = useAuth();
 
-  // Role validation: Only 'seeker' or 'both' can search rides
   const isSeeker = user?.role === 'seeker' || user?.role === 'both';
   if (!isSeeker) {
     return (
@@ -16,13 +15,12 @@ export default function SearchRides({ navigate }) {
         <div style={{fontSize:64}}>🚫</div>
         <h2 className="heading mt-20" style={{fontSize:28}}>Access Denied</h2>
         <p className="text-muted mt-8">Only seekers can search for rides. Your current role: <strong>{user?.role || 'unknown'}</strong></p>
-        <button className="btn btn-primary btn-lg mt-32" onClick={() => navigate('dashboard')}>
-          Back to Dashboard
-        </button>
+        <button className="btn btn-primary btn-lg mt-32" onClick={() => navigate('dashboard')}>Back to Dashboard</button>
       </div>
     );
   }
-  const [filters,  setFilters]  = useState({ lat:'', lng:'', date:'', locationLabel:'' });
+
+  const [filters,  setFilters]  = useState({ fromLat:'', fromLng:'', fromLabel:'', toLat:'', toLng:'', toLabel:'', date:'', time:'' });
   const [rides,    setRides]    = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [searched, setSearched] = useState(false);
@@ -36,21 +34,25 @@ export default function SearchRides({ navigate }) {
     e?.preventDefault();
     setError('');
     setNoMatchSuggestions(null);
-    if (!filters.lat || !filters.lng) { setError('Enter or detect your location first'); return; }
+    if (!filters.fromLat || !filters.fromLng) { setError('Enter or detect your pickup location first'); return; }
+    if (filters.fromLat === filters.toLat && filters.fromLng === filters.toLng && filters.toLat) {
+      setError('Pickup and drop location cannot be the same');
+      return;
+    }
     setLoading(true);
     try {
       const data = await api.searchRides({
-        lat: filters.lat, lng: filters.lng,
+        lat: filters.fromLat,
+        lng: filters.fromLng,
         maxDistance: 50000,
         date: filters.date || undefined,
       });
       setRides(data);
       setSearched(true);
       setBookingMap({});
-      // If no rides found, fetch suggestions
       if (!data || data.length === 0) {
         try {
-          const suggestions = await api.noMatchSuggest({ lat: filters.lat, lng: filters.lng });
+          const suggestions = await api.noMatchSuggest({ lat: filters.fromLat, lng: filters.fromLng });
           setNoMatchSuggestions(suggestions);
         } catch {}
       }
@@ -61,11 +63,11 @@ export default function SearchRides({ navigate }) {
     }
   }, [filters]);
 
-  const book = async (rideId) => {
+  const book = async (rideId, seats = 1) => {
     setBookingMap(m => ({ ...m, [rideId]: { loading: true } }));
     try {
-      await api.requestBooking(rideId);
-      setBookingMap(m => ({ ...m, [rideId]: { status: 'pending' } }));
+      await api.requestBooking(rideId, seats);
+      setBookingMap(m => ({ ...m, [rideId]: { status: 'pending', seats } }));
     } catch (err) {
       setBookingMap(m => ({ ...m, [rideId]: { error: err.message } }));
     }
@@ -83,22 +85,50 @@ export default function SearchRides({ navigate }) {
         </div>
         <div className="card-body">
           {error && <div className="alert alert-error mb-16">{error}</div>}
-          <div className="search-grid">
-            <div className="field" style={{marginBottom:0, gridColumn: '1 / -1'}}>
-              <label>Your Location</label>
-              <LocationSearch
-                value={filters.locationLabel || (filters.lat && filters.lng ? `${filters.lat}, ${filters.lng}` : '')}
-                onChange={(label, lat, lng) => setFilters(f => ({ ...f, lat: lat.toString(), lng: lng.toString(), locationLabel: label }))}
-                placeholder="Search area, college, landmark or address..."
+
+          {/* Pickup location */}
+          <div className="field mb-16">
+            <label>📍 Pickup Location</label>
+            <LocationSearch
+              key="pickup"
+              onChange={(label, lat, lng) => setFilters(f => ({ ...f, fromLat: lat.toString(), fromLng: lng.toString(), fromLabel: label }))}
+              placeholder="Search your pickup area, college, landmark..."
+            />
+          </div>
+
+          {/* Drop location */}
+          <div className="field mb-16">
+            <label>🏁 Drop Location</label>
+            <LocationSearch
+              key="drop"
+              onChange={(label, lat, lng) => setFilters(f => ({ ...f, toLat: lat.toString(), toLng: lng.toString(), toLabel: label }))}
+              placeholder="Search your drop area, college, landmark..."
+            />
+          </div>
+
+          {/* Date and Time */}
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16}}>
+            <div className="field" style={{marginBottom:0}}>
+              <label>📅 Date (optional)</label>
+              <input
+                className="input"
+                type="date"
+                min={new Date().toISOString().split('T')[0]}
+                value={filters.date}
+                onChange={set('date')}
               />
             </div>
-
             <div className="field" style={{marginBottom:0}}>
-              <label>Date (optional)</label>
-              <input className="input" type="date" min={new Date().toISOString().split('T')[0]}
-                value={filters.date} onChange={set('date')} />
+              <label>🕐 Time (optional)</label>
+              <input
+                className="input"
+                type="time"
+                value={filters.time}
+                onChange={set('time')}
+              />
             </div>
           </div>
+
           <div className="search-actions">
             <button type="submit" className={`btn btn-primary ${loading ? 'btn-loading' : ''}`} disabled={loading}>
               {!loading && '🔍 Search Rides'}
@@ -127,15 +157,13 @@ export default function SearchRides({ navigate }) {
                 <div className="empty-title">No rides nearby</div>
                 <div className="empty-sub mt-8">No rides found nearby. Try a different location or date, or check back later.</div>
               </div>
-
-              {/* No-match suggestions */}
               {noMatchSuggestions && (
                 <div style={{background:'#1a1a2e', border:'1px solid #6c63ff44', borderRadius:12, padding:20, marginTop:20}}>
                   <h4 style={{color:'#6c63ff', marginBottom:12}}>What you can do instead:</h4>
                   {noMatchSuggestions.suggestions?.map((s, i) => (
                     <div key={i} style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid #222'}}>
                       <span style={{color:'#ccc', fontSize:14}}>{s.label}</span>
-                      <button className="btn btn-ghost btn-sm" onClick={() => navigate(s.action === 'subscribe_alert' ? 'route-alerts' : 'route-alerts')}>
+                      <button className="btn btn-ghost btn-sm" onClick={() => navigate('route-alerts')}>
                         {s.action === 'subscribe_alert' ? 'Subscribe' : 'Post Request'}
                       </button>
                     </div>
@@ -155,12 +183,10 @@ export default function SearchRides({ navigate }) {
                       onBook={bm?.status ? null : book}
                       bookingStatus={bm?.status}
                     />
-                    {bm?.error && (
-                      <div className="alert alert-error mt-8">{bm.error}</div>
-                    )}
+                    {bm?.error && <div className="alert alert-error mt-8">{bm.error}</div>}
                     {bm?.status === 'pending' && (
                       <div className="alert alert-success mt-8">
-                        Booking request sent! Waiting for the provider to accept.
+                        Booking request sent for {bm.seats || 1} seat{(bm.seats || 1) > 1 ? 's' : ''}! Waiting for the provider to accept.
                       </div>
                     )}
                   </div>

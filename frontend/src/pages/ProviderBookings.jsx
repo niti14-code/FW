@@ -31,10 +31,20 @@ export default function ProviderBookings({ navigate }) {
   const [error, setError] = useState('');
   const [actionMap, setActionMap] = useState({});
 
-  const { socket, connected, notifications, clearNotifications } = useSocket(
+  const { socket, connected, notifications } = useSocket(
     user?._id || user?.userId,
     'provider'
   );
+  const [localNotifications, setLocalNotifications] = useState([]);
+
+  // Merge hook notifications into local state
+  useEffect(() => {
+    if (notifications.length > 0) {
+      setLocalNotifications(prev => [...notifications, ...prev]);
+    }
+  }, [notifications]);
+
+  const clearNotifications = () => setLocalNotifications([]);
 
   const fetchRides = async () => {
     try {
@@ -58,8 +68,8 @@ export default function ProviderBookings({ navigate }) {
 
   
   useEffect(() => {
-    if (notifications.length === 0) return;
-    notifications.forEach(notif => {
+    if (localNotifications.length === 0) return;
+    localNotifications.forEach(notif => {
       if (notif.type === 'new-booking' || notif.notification?.type === 'BOOKING_REQUEST') {
         const rideId = notif.data?.rideId || notif.booking?.ride?._id;
         if (rideId && selected === rideId) loadBookings(rideId);
@@ -67,7 +77,7 @@ export default function ProviderBookings({ navigate }) {
       }
     });
     clearNotifications();
-  }, [notifications, selected, clearNotifications]);
+  }, [localNotifications, selected]);
 
   
   // Check and update ride completion status
@@ -256,7 +266,7 @@ const rideStatusBadge = (s) => ({
 
       {error && <div className="alert alert-error mb-16">{error}</div>}
 
-      {notifications.length > 0 && (
+      {localNotifications.length > 0 && (
         <div className="alert alert-success mb-16" style={{animation:'slideIn 0.3s ease'}}>
           <strong>🎉 New booking request!</strong>
           <button onClick={() => { clearNotifications(); manualRefresh(); }} className="btn btn-primary btn-sm ml-12">View</button>
@@ -435,8 +445,8 @@ const rideStatusBadge = (s) => ({
                           <div className="pb2-bk-avatar">{b.seekerId?.name?.charAt(0) || 'S'}</div>
                           <div className="pb2-bk-info">
                             <div className="pb2-bk-name">{b.seekerId?.name || 'Seeker'}</div>
-                              <div style={{ fontSize: 12, color: '#aaa' }}>
-                                    {b.seats || 1} seat{(b.seats || 1) > 1 ? 's' : ''}
+                              <div style={{ fontSize: 12, color: '#fbbf24', fontWeight: 600 }}>
+                                    💺 {b.seats || 1} seat{(b.seats || 1) > 1 ? 's' : ''} requested
                                </div>
                             {b.seekerId?.college && (
                               <div className="pb2-bk-college">{b.seekerId.college}</div>

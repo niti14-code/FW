@@ -3,44 +3,20 @@ import * as api from '../services/api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import './RideDetail.css';
 
-// FIXED: reverse-geocode with proper coordinate order
-const geoCache = new Map();
-async function reverseGeocode([lng, lat]) {
-  const key = `${lat.toFixed(4)},${lng.toFixed(4)}`;
-  if (geoCache.has(key)) return geoCache.get(key);
-  try {
-    const r = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-      { headers: { 'Accept-Language': 'en' } }
-    );
-    const d = await r.json();
-    const a = d.address || {};
-    const name = a.neighbourhood || a.suburb || a.village || a.city_district ||
-      a.city || a.town || d.display_name?.split(',')[0] ||
-      `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-    geoCache.set(key, name);
-    return name;
-  } catch {
-    return `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
-  }
-}
-
-// FIXED: useLocationName hook
 function useLocationName(locationField) {
   const [name, setName] = useState('');
   useEffect(() => {
     if (!locationField) return;
-    
-    // Check stored address first
     if (locationField.address?.trim()) {
       setName(locationField.address.trim());
       return;
     }
-    
-    // Fallback to reverse geocode
     if (locationField.coordinates?.length === 2) {
       setName('Loading…');
-      reverseGeocode(locationField.coordinates).then(setName);
+      const [lng, lat] = locationField.coordinates;
+      api.reverseGeocode(lat, lng)
+        .then(r => setName(r.label || r.display_name || '…'))
+        .catch(() => setName(`${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`));
     }
   }, [locationField]);
   return name;
