@@ -4,6 +4,7 @@ import './LocationSearch.css';
 
 export default function LocationSearch({
   placeholder = 'Search for a location...',
+  value = '',
   onChange,
   onLocationSelect,
   className = ''
@@ -16,6 +17,9 @@ export default function LocationSearch({
 
   const suggestionsRef = useRef(null);
   const debounceTimer  = useRef(null);
+  useEffect(() => {
+  setQuery(value || '');
+}, [value]);
 
   // ── Debounced search ──────────────────────────────────────────
   const debouncedSearch = useCallback(async (q) => {
@@ -40,13 +44,30 @@ export default function LocationSearch({
 
   // ── Select from dropdown ──────────────────────────────────────
   const handleSelect = (location) => {
-    const label = location.label || location.display_name?.split(',').slice(0, 2).join(',').trim() || 'Selected Location';
-    setQuery(label);
-    setShowSuggestions(false);
-    setSuggestions([]);
-    onChange?.(label, location.lat, location.lng);
-    onLocationSelect?.({ ...location, label });
-  };
+
+  const fullAddress =
+    location.display_name ||
+    location.label ||
+    'Selected Location';
+
+  setQuery(fullAddress);
+
+  setShowSuggestions(false);
+
+  setSuggestions([]);
+
+  onChange?.(
+    fullAddress,
+    location.lat,
+    location.lng
+  );
+
+  onLocationSelect?.({
+    ...location,
+    label: fullAddress
+  });
+
+};
 
   // ── GPS detect ────────────────────────────────────────────────
   const handleGeolocation = () => {
@@ -55,27 +76,78 @@ export default function LocationSearch({
     setQuery('Detecting your location…');
 
     navigator.geolocation.getCurrentPosition(
-      async ({ coords: { latitude, longitude } }) => {
-        try {
-          const address = await api.reverseGeocode(latitude, longitude);
-          const label = address.label || address.display_name || 'My Location';
-          setQuery(label);
-          onChange?.(label, latitude, longitude);
-          onLocationSelect?.({ label, display_name: address.display_name, lat: latitude, lng: longitude });
-        } catch {
-          setQuery('My Location');
-          onChange?.('My Location', latitude, longitude);
-        } finally {
-          setGeoLoading(false);
-        }
-      },
-      () => {
-        setQuery('');
-        setGeoLoading(false);
-        alert('Could not get your location. Please search manually.');
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
+
+  async (position) => {
+
+    try {
+
+      const lat = position.coords.latitude;
+      const lng = position.coords.longitude;
+
+      // Show temporary loading text
+      setQuery('Detecting location...');
+
+      // Reverse geocode from backend
+      const location =
+        await api.reverseGeocode(lat, lng);
+
+      console.log(
+        'Reverse geocode response:',
+        location
+      );
+
+      // Get readable address
+      const address =
+        location?.display_name?.trim();
+
+      // Final address fallback
+      const finalAddress =
+        address &&
+        address !== 'Unknown Location'
+          ? address
+          : `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
+
+      // Update input
+      setQuery(finalAddress);
+
+      // Send to parent
+      onChange?.(
+        finalAddress,
+        lat,
+        lng
+      );
+
+      onLocationSelect?.({
+        display_name: finalAddress,
+        lat,
+        lng
+      });
+
+    } catch (err) {
+
+      console.error(err);
+
+      setQuery('Unable to detect location');
+
+    }
+
+  },
+
+  (err) => {
+
+    console.error(err);
+
+    setQuery('Location permission denied');
+
+  },
+
+  {
+    enableHighAccuracy: true,
+    timeout: 10000,
+    maximumAge: 0
+  }
+
+);
   };
 
   // ── Close on outside click ────────────────────────────────────
@@ -124,14 +196,17 @@ export default function LocationSearch({
             </div>
           ) : suggestions.length > 0 ? (
             suggestions.map((s, i) => {
-              const main = s.label || s.display_name?.split(',')[0];
-              const sub  = s.display_name;
+              const main =
+              s.display_name ||
+              s.label;
+
+              const sub = null;
               return (
                 <div key={i} className="suggestion-item" onClick={() => handleSelect(s)}>
                   <div className="suggestion-icon">📍</div>
                   <div className="suggestion-body">
                     <div className="suggestion-main">{main}</div>
-                    {sub && sub !== main && <div className="suggestion-sub">{sub}</div>}
+                    {/*{sub && sub !== main && <div className="suggestion-sub">{sub}</div>}*/}
                   </div>
                 </div>
               );

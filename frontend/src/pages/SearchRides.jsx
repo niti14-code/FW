@@ -42,11 +42,20 @@ export default function SearchRides({ navigate }) {
     setLoading(true);
     try {
       const data = await api.searchRides({
-        lat: filters.fromLat,
-        lng: filters.fromLng,
-        maxDistance: 50000,
-        date: filters.date || undefined,
-      });
+
+  lat: filters.fromLat,
+  lng: filters.fromLng,
+
+  dropLat: filters.toLat || undefined,
+  dropLng: filters.toLng || undefined,
+
+  maxDistance: 50000,
+
+  date: filters.date || undefined,
+
+  time: filters.time || undefined
+
+});
       setRides(data);
       setSearched(true);
       setBookingMap({});
@@ -90,7 +99,8 @@ export default function SearchRides({ navigate }) {
           <div className="field mb-16">
             <label>📍 Pickup Location</label>
             <LocationSearch
-              key="pickup"
+             key="pickup"
+             value={filters.fromLabel}
               onChange={(label, lat, lng) => setFilters(f => ({ ...f, fromLat: lat.toString(), fromLng: lng.toString(), fromLabel: label }))}
               placeholder="Search your pickup area, college, landmark..."
             />
@@ -101,6 +111,7 @@ export default function SearchRides({ navigate }) {
             <label>🏁 Drop Location</label>
             <LocationSearch
               key="drop"
+              value={filters.toLabel}
               onChange={(label, lat, lng) => setFilters(f => ({ ...f, toLat: lat.toString(), toLng: lng.toString(), toLabel: label }))}
               placeholder="Search your drop area, college, landmark..."
             />

@@ -2,83 +2,127 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 
-// Proxy for location search (avoids CORS issues in frontend)
-/*router.get('/search', auth, async (req, res) => {
-  try {
-    const { q } = req.query;
-    if (!q || q.length < 2) {
-      return res.json([]);
-    }
-
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=5&countrycodes=in`,
-      {
-        headers: {
-          'User-Agent': 'CampusRide/1.0'
-        }
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error('Nominatim API failed');
-    }
-
-    const data = await response.json();
-    const results = data.map(place => ({
-      display_name: place.display_name,
-      lat: parseFloat(place.lat),
-      lng: parseFloat(place.lon),
-      label: place.display_name.split(',')[0]
-    }));
-
-    res.json(results);
-  } catch (error) {
-    console.error('Location search error:', error);
-    res.status(500).json({ message: 'Location search failed' });
-  }
-});*/
 router.get('/search', auth, async (req, res) => {
+
   try {
 
     const { q } = req.query;
 
-    if (!q || q.length < 2) {
+    if (!q || q.trim().length < 2) {
       return res.json([]);
     }
 
-    const response = await fetch(
-      `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8`
-    );
+    let results = [];
 
-    if (!response.ok) {
-      throw new Error('Photon API failed');
+    // =====================================================
+    // 1. TRY GEOAPIFY FIRST
+    // =====================================================
+
+    try {
+
+      const geoResponse = await fetch(
+
+        `https://api.geoapify.com/v1/geocode/autocomplete?` +
+
+        new URLSearchParams({
+          text: q,
+          apiKey: process.env.GEOAPIFY_API_KEY,
+          limit: 8,
+          filter: 'countrycode:in'
+        })
+
+      );
+
+      if (geoResponse.ok) {
+
+        const geoData = await geoResponse.json();
+
+        results = geoData.features.map(place => ({
+
+          display_name:
+            place.properties.formatted,
+
+          lat:
+            Number(place.properties.lat.toFixed(5)),
+
+          lng:
+            Number(place.properties.lon.toFixed(5)),
+
+          label:
+          place.properties.name ||
+          place.properties.street ||
+          place.properties.suburb ||
+          place.properties.city ||
+          place.properties.county ||
+          place.properties.state ||
+          place.properties.formatted?.split(',')[0] ||
+          'Location'
+            
+
+        }));
+
+      }
+
+    } catch (err) {
+
+      console.log('Geoapify failed, trying Photon...');
+
     }
 
-    const data = await response.json();
+    // =====================================================
+    // 2. FALLBACK TO PHOTON
+    // =====================================================
 
-    const results = data.features.map(place => ({
+    if (!results.length) {
 
-      display_name: [
-        place.properties.name,
-        place.properties.street,
-        place.properties.city,
-        place.properties.state,
-        place.properties.country
-      ]
-        .filter(Boolean)
-        .join(', '),
+      try {
 
-      lat: Number(place.geometry.coordinates[1].toFixed(3)),
+        const photonResponse = await fetch(
+          `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=8`
+        );
 
-      lng: Number(place.geometry.coordinates[0].toFixed(3)),
+        if (photonResponse.ok) {
 
-      label:
-        place.properties.name ||
-        place.properties.street ||
-        place.properties.city ||
-        'Unknown Location'
+          const photonData = await photonResponse.json();
 
-    }));
+          results = photonData.features.map(place => ({
+
+            display_name: [
+              place.properties.name,
+              place.properties.street,
+              place.properties.city,
+              place.properties.state,
+              place.properties.country
+            ]
+              .filter(Boolean)
+              .join(', '),
+
+            lat:
+              Number(place.geometry.coordinates[1].toFixed(5)),
+
+            lng:
+              Number(place.geometry.coordinates[0].toFixed(5)),
+
+            label:
+            place.properties.name ||
+            place.properties.street ||
+            place.properties.suburb ||
+            place.properties.city ||
+            place.properties.state ||
+            place.properties.country ||
+            'Location'
+
+          }));
+
+        }
+
+      } catch (err) {
+
+        console.error('Photon fallback failed:', err);
+
+      }
+
+    }
 
     res.json(results);
 
@@ -91,124 +135,111 @@ router.get('/search', auth, async (req, res) => {
     });
 
   }
+
 });
 
-// Proxy for reverse geocode (avoids CORS issues in frontend)
 router.get('/reverse', auth, async (req, res) => {
-  try {
-    const { lat, lng } = req.query;
-    
-    if (!lat || !lng) {
-      return res.status(400).json({ message: 'lat and lng required' });
-    }
 
-    // zoom=18 gives the most granular address detail (building/house level)
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
-      {
-        headers: {
-          'User-Agent': 'CampusRide/1.0'
+  try {
+
+    const { lat, lng } = req.query;
+
+    let address = null;
+
+    // =====================================================
+    // 1. TRY GEOAPIFY
+    // =====================================================
+
+    try {
+
+      const geoResponse = await fetch(
+
+        `https://api.geoapify.com/v1/geocode/reverse?` +
+
+        new URLSearchParams({
+          lat,
+          lon: lng,
+          apiKey: process.env.GEOAPIFY_API_KEY
+        })
+
+      );
+
+      if (geoResponse.ok) {
+
+        const geoData = await geoResponse.json();
+
+        const place = geoData.features?.[0];
+
+        if (place?.properties?.formatted) {
+
+          address = place.properties.formatted;
+
         }
+
       }
-    );
 
-    if (!response.ok) {
-      throw new Error('Nominatim reverse geocode failed');
+    } catch (err) {
+
+      console.log('Geoapify reverse failed, trying Photon...');
+
     }
 
-    const data = await response.json();
-    const address = data.address || {};
+    // =====================================================
+    // 2. PHOTON FALLBACK
+    // =====================================================
 
-    // Build full address like: "2, Venkatreddy Layout, Vallabha Nagar, Bikasipura, Bengaluru, Karnataka 560062"
-    const parts = [];
+    if (!address) {
 
-    // 1. House/building number + road/street
-    if (address.house_number && address.road) {
-      parts.push(`${address.house_number}, ${address.road}`);
-    } else if (address.house_number) {
-      parts.push(address.house_number);
-    } else if (address.road) {
-      parts.push(address.road);
-    } else if (address.pedestrian) {
-      parts.push(address.pedestrian);
-    } else if (address.footway) {
-      parts.push(address.footway);
-    } else if (address.path) {
-      parts.push(address.path);
+      try {
+
+        const photonResponse = await fetch(
+          `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`
+        );
+
+        if (photonResponse.ok) {
+
+          const photonData = await photonResponse.json();
+
+          const place = photonData.features?.[0];
+
+          if (place) {
+
+            address = [
+              place.properties.name,
+              place.properties.street,
+              place.properties.city,
+              place.properties.state
+            ]
+              .filter(Boolean)
+              .join(', ');
+
+          }
+
+        }
+
+      } catch (err) {
+
+        console.error('Photon reverse failed:', err);
+
+      }
+
     }
-
-    // 2. Named locality / layout / colony
-    if (address.neighbourhood)   parts.push(address.neighbourhood);
-    if (address.quarter)         parts.push(address.quarter);
-    if (address.allotments)      parts.push(address.allotments);
-
-    // 3. Suburb / area
-    if (address.suburb)          parts.push(address.suburb);
-    if (address.village)         parts.push(address.village);
-    if (address.city_district)   parts.push(address.city_district);
-
-    // 4. City
-    const city = address.city || address.town || address.municipality;
-    if (city) parts.push(city);
-
-    // 5. State + Pincode
-    if (address.state)           parts.push(address.state);
-    if (address.postcode)        parts.push(address.postcode);
-
-    // If we got nothing useful, fall back to Nominatim's own display_name
-    const label = parts.length > 0
-      ? parts.join(', ')
-      : data.display_name || 'Unknown Location';
 
     res.json({
-      display_name: data.display_name,
-      label,
-      lat: parseFloat(lat),
-      lng: parseFloat(lng)
-    });
-  } catch (error) {
-    console.error('Reverse geocode error:', error);
-    res.status(500).json({ message: 'Reverse geocode failed' });
-  }
-});
-
-router.get('/reverse', auth, async (req, res) => {
-  try {
-    const { lat, lng } = req.query;
-
-    const response = await fetch(
-      `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`
-    );
-
-    const data = await response.json();
-
-    const place = data.features?.[0];
-
-    if (!place) {
-      return res.json({
-        display_name: 'Current Location'
-      });
-    }
-     const address = [
-      place.properties.name,
-      place.properties.street,
-      place.properties.city,
-      place.properties.state
-    ]
-      .filter(Boolean)
-      .join(', ');
-
-    res.json({
-      display_name: address
+      display_name: address || 'Current Location'
     });
 
   } catch (err) {
+
     console.error(err);
 
     res.status(500).json({
       message: 'Reverse geocode failed'
     });
+
   }
+
 });
+
 
 module.exports = router;

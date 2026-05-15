@@ -31,8 +31,55 @@ exports.createRide = async (req, res) => {
       return res.status(403).json({ message: 'KYC not approved' });
     }
 
-    const pickupAddress = pickup?.address || pickup?.label || 'Unknown Location';
-    const dropAddress = drop?.address || drop?.label || 'Unknown Location';
+    //const pickupAddress = pickup?.address || pickup?.label || 'Unknown Location';
+    //const dropAddress = drop?.address || drop?.label || 'Unknown Location';
+    const extractAddress = (location, fallback = 'Location') => {
+
+  if (!location) return fallback;
+
+  // Full address first
+  if (
+    typeof location.address === 'string' &&
+    location.address.trim() &&
+    location.address !== 'Unknown Location'
+  ) {
+    return location.address.trim();
+  }
+
+  // Display name next
+  if (
+    typeof location.display_name === 'string' &&
+    location.display_name.trim() &&
+    location.display_name !== 'Unknown Location'
+  ) {
+    return location.display_name.trim();
+  }
+
+  // Label next
+  if (
+    typeof location.label === 'string' &&
+    location.label.trim() &&
+    location.label !== 'Unknown Location'
+  ) {
+    return location.label.trim();
+  }
+
+  // Geoapify formatted fallback
+  if (
+    typeof location.formatted === 'string' &&
+    location.formatted.trim()
+  ) {
+    return location.formatted.trim();
+  }
+
+  return fallback;
+};
+
+const pickupAddress =
+  extractAddress(pickup, 'Pickup Location');
+
+const dropAddress =
+  extractAddress(drop, 'Drop Location');
 
     const ride = new Ride({
       providerId: userId,
