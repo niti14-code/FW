@@ -16,6 +16,8 @@ const userSchema = new mongoose.Schema({
       return this.role !== 'admin';  // College not required for admin
     } 
   },
+  resetPasswordToken: String,
+  resetPasswordExpire: Date,
   rating: { type: Number, default: 0 },
   totalRides: { type: Number, default: 0 },
   kycStatus: {

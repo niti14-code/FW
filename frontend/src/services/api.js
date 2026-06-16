@@ -646,6 +646,41 @@ export const addCommunityReply = (postId, content) =>
   }
 };
 
+//Forgot password
+export const forgotPassword = (email) =>
+  request('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email })
+  });
+
+//Reset password
+export const resetPassword = async (
+  token,
+  password
+) => {
+
+  const response = await fetch(
+    `${API_BASE}/api/auth/reset-password/${token}`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        password
+      })
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message);
+  }
+
+  return data;
+};
+
 //Ratings page
 export const getRideRatings = (rideId) => request(`/ratings/ride/${rideId}`);
 export const getUserRatings = (userId) => request(`/ratings/${userId}`);

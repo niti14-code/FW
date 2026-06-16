@@ -7,62 +7,80 @@ import './SearchRides.css';
 
 export default function SearchRides({ navigate }) {
   const { user } = useAuth();
-
   const isSeeker = user?.role === 'seeker' || user?.role === 'both';
-  if (!isSeeker) {
-    return (
-      <div className="narrow-wrap fade-up text-center" style={{paddingTop:80}}>
-        <div style={{fontSize:64}}>🚫</div>
-        <h2 className="heading mt-20" style={{fontSize:28}}>Access Denied</h2>
-        <p className="text-muted mt-8">Only seekers can search for rides. Your current role: <strong>{user?.role || 'unknown'}</strong></p>
-        <button className="btn btn-primary btn-lg mt-32" onClick={() => navigate('dashboard')}>Back to Dashboard</button>
-      </div>
-    );
-  }
 
-  const [filters,  setFilters]  = useState({ fromLat:'', fromLng:'', fromLabel:'', toLat:'', toLng:'', toLabel:'', date:'', time:'' });
-  const [rides,    setRides]    = useState([]);
-  const [loading,  setLoading]  = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [error,    setError]    = useState('');
-  const [bookingMap, setBookingMap] = useState({});
+  if (!isSeeker) return (
+    <div className="narrow-wrap fade-up text-center" style={{paddingTop:80}}>
+      <div style={{fontSize:64}}>🚫</div>
+      <h2 className="heading mt-20" style={{fontSize:28}}>Access Denied</h2>
+      <p className="text-muted mt-8">Only seekers can search for rides.</p>
+      <button className="btn btn-primary btn-lg mt-32" onClick={() => navigate('dashboard')}>Back to Dashboard</button>
+    </div>
+  );
+
+  const [filters,  setFilters]  = useState({
+    pickupLat: '', pickupLng: '', pickupLabel: '',
+    dropLat:   '', dropLng:   '', dropLabel:   '',
+    date: '', time: '',
+  });
+  const [scheduleMode, setScheduleMode] = useState('now'); // 'now' | 'later'
+  const [rides,        setRides]        = useState([]);
+  const [loading,      setLoading]      = useState(false);
+  const [geoLoading,   setGeoLoading]   = useState(false);
+  const [searched,     setSearched]     = useState(false);
+  const [error,        setError]        = useState('');
+  const [bookingMap,   setBookingMap]   = useState({});
   const [noMatchSuggestions, setNoMatchSuggestions] = useState(null);
 
   const set = k => e => setFilters(f => ({ ...f, [k]: e.target.value }));
+
+  // Detect current location → reverse geocode to real address
+  const geoLocate = async (field) => {
+    if (!navigator.geolocation) { setError('Geolocation not supported'); return; }
+    setGeoLoading(field);
+    setError('');
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const addr = await api.reverseGeocode(coords.latitude, coords.longitude);
+          const label = addr.label || addr.display_name?.split(',').slice(0,2).join(',').trim() || 'Current Location';
+          const isPickup = field === 'pickup';
+          setFilters(f => ({
+            ...f,
+            [isPickup ? 'pickupLabel' : 'dropLabel']: label,
+            [isPickup ? 'pickupLat'   : 'dropLat']:   coords.latitude.toString(),
+            [isPickup ? 'pickupLng'   : 'dropLng']:   coords.longitude.toString(),
+          }));
+        } catch {
+          setError('Could not get address. Try searching manually.');
+        } finally {
+          setGeoLoading(false);
+        }
+      },
+      () => { setError('Could not detect location. Enter manually.'); setGeoLoading(false); }
+    );
+  };
 
   const doSearch = useCallback(async e => {
     e?.preventDefault();
     setError('');
     setNoMatchSuggestions(null);
-    if (!filters.fromLat || !filters.fromLng) { setError('Enter or detect your pickup location first'); return; }
-    if (filters.fromLat === filters.toLat && filters.fromLng === filters.toLng && filters.toLat) {
-      setError('Pickup and drop location cannot be the same');
-      return;
-    }
+    if (!filters.pickupLat || !filters.pickupLng) { setError('Enter or detect your pickup location'); return; }
     setLoading(true);
     try {
       const data = await api.searchRides({
-
-  lat: filters.fromLat,
-  lng: filters.fromLng,
-
-  dropLat: filters.toLat || undefined,
-  dropLng: filters.toLng || undefined,
-
-  maxDistance: 50000,
-
-  date: filters.date || undefined,
-
-  time: filters.time || undefined
-
-});
+        lat:         filters.pickupLat,
+        lng:         filters.pickupLng,
+        maxDistance: 50000,
+        date: scheduleMode === 'later' && filters.date ? filters.date : undefined,
+      });
       setRides(data);
       setSearched(true);
       setBookingMap({});
       if (!data || data.length === 0) {
         try {
-          const suggestions = await api.noMatchSuggest({ lat: filters.fromLat, lng: filters.fromLng });
-          setNoMatchSuggestions(suggestions);
+          const sugg = await api.noMatchSuggest({ lat: filters.pickupLat, lng: filters.pickupLng });
+          setNoMatchSuggestions(sugg);
         } catch {}
       }
     } catch (err) {
@@ -70,23 +88,26 @@ export default function SearchRides({ navigate }) {
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, scheduleMode]);
 
-  const book = async (rideId, seats = 1) => {
+  const book = async (rideId) => {
     setBookingMap(m => ({ ...m, [rideId]: { loading: true } }));
     try {
-      await api.requestBooking(rideId, seats);
-      setBookingMap(m => ({ ...m, [rideId]: { status: 'pending', seats } }));
+      await api.requestBooking(rideId);
+      setBookingMap(m => ({ ...m, [rideId]: { status: 'pending' } }));
     } catch (err) {
       setBookingMap(m => ({ ...m, [rideId]: { error: err.message } }));
     }
   };
 
+  const today = new Date().toISOString().split('T')[0];
+  const nowTime = new Date().toTimeString().slice(0,5);
+
   return (
     <div className="page-wrap fade-up">
       <p className="eyebrow mb-16">Seeker</p>
       <h1 className="heading mb-8" style={{fontSize:30}}>Find a Ride</h1>
-      <p className="text-muted mb-24 text-sm">Search rides near your location using geo-proximity matching.</p>
+      <p className="text-muted mb-24 text-sm">Search rides near your location.</p>
 
       <form className="search-box card" onSubmit={doSearch}>
         <div className="card-header">
@@ -95,69 +116,100 @@ export default function SearchRides({ navigate }) {
         <div className="card-body">
           {error && <div className="alert alert-error mb-16">{error}</div>}
 
-          {/* Pickup location */}
-          <div className="field mb-16">
-            <label>📍 Pickup Location</label>
-            <LocationSearch
-             key="pickup"
-             value={filters.fromLabel}
-              onChange={(label, lat, lng) => setFilters(f => ({ ...f, fromLat: lat.toString(), fromLng: lng.toString(), fromLabel: label }))}
-              placeholder="Search your pickup area, college, landmark..."
-            />
+          {/* ── Pickup location ── */}
+          <div className="field">
+            <label>📍 Pickup / Your Location ✶</label>
+            <div className="loc-input-row">
+              <LocationSearch
+                value={filters.pickupLabel}
+                onChange={(label, lat, lng) => setFilters(f => ({
+                  ...f, pickupLabel: label,
+                  pickupLat: lat.toString(), pickupLng: lng.toString()
+                }))}
+                placeholder="Search area, college, landmark…"
+              />
+              <button type="button"
+                className={'btn btn-outline btn-sm geo-btn' + (geoLoading === 'pickup' ? ' btn-loading' : '')}
+                onClick={() => geoLocate('pickup')}
+                title="Detect my location">
+                {geoLoading !== 'pickup' && '🎯'}
+              </button>
+            </div>
           </div>
 
-          {/* Drop location */}
-          <div className="field mb-16">
+          {/* ── Drop location ── */}
+          <div className="field">
             <label>🏁 Drop Location</label>
-            <LocationSearch
-              key="drop"
-              value={filters.toLabel}
-              onChange={(label, lat, lng) => setFilters(f => ({ ...f, toLat: lat.toString(), toLng: lng.toString(), toLabel: label }))}
-              placeholder="Search your drop area, college, landmark..."
-            />
+            <div className="loc-input-row">
+              <LocationSearch
+                value={filters.dropLabel}
+                onChange={(label, lat, lng) => setFilters(f => ({
+                  ...f, dropLabel: label,
+                  dropLat: lat.toString(), dropLng: lng.toString()
+                }))}
+                placeholder="Where do you want to go?"
+              />
+              <button type="button"
+                className={'btn btn-outline btn-sm geo-btn' + (geoLoading === 'drop' ? ' btn-loading' : '')}
+                onClick={() => geoLocate('drop')}
+                title="Detect drop location">
+                {geoLoading !== 'drop' && '🎯'}
+              </button>
+            </div>
           </div>
 
-          {/* Date and Time */}
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16}}>
-            <div className="field" style={{marginBottom:0}}>
-              <label>📅 Date (optional)</label>
-              <input
-                className="input"
-                type="date"
-                min={new Date().toISOString().split('T')[0]}
-                value={filters.date}
-                onChange={set('date')}
-              />
-            </div>
-            <div className="field" style={{marginBottom:0}}>
-              <label>🕐 Time (optional)</label>
-              <input
-                className="input"
-                type="time"
-                value={filters.time}
-                onChange={set('time')}
-              />
+          {/* ── Schedule toggle ── */}
+          <div className="field">
+            <label>When do you need a ride?</label>
+            <div className="schedule-toggle">
+              <button type="button"
+                className={'sched-btn' + (scheduleMode === 'now' ? ' active' : '')}
+                onClick={() => setScheduleMode('now')}>
+                ⚡ Ride Now
+              </button>
+              <button type="button"
+                className={'sched-btn' + (scheduleMode === 'later' ? ' active' : '')}
+                onClick={() => setScheduleMode('later')}>
+                🗓 Schedule for Later
+              </button>
             </div>
           </div>
+
+          {/* ── Date + Time (only when scheduling later) ── */}
+          {scheduleMode === 'later' && (
+            <div className="grid-2 mb-4">
+              <div className="field" style={{marginBottom:0}}>
+                <label>Date ✶</label>
+                <input className="input" type="date" min={today}
+                  value={filters.date} onChange={set('date')} required />
+              </div>
+              <div className="field" style={{marginBottom:0}}>
+                <label>Time ✶</label>
+                <input className="input" type="time" min={filters.date === today ? nowTime : undefined}
+                  value={filters.time} onChange={set('time')} required />
+              </div>
+            </div>
+          )}
 
           <div className="search-actions">
-            <button type="submit" className={`btn btn-primary ${loading ? 'btn-loading' : ''}`} disabled={loading}>
+            <button type="submit"
+              className={`btn btn-primary ${loading ? 'btn-loading' : ''}`}
+              disabled={loading}>
               {!loading && '🔍 Search Rides'}
             </button>
           </div>
         </div>
       </form>
 
+      {/* ── Results ── */}
       {searched && (
         <div className="mt-32">
           <div className="flex-between mb-16">
             <h2 className="heading" style={{fontSize:18}}>
               {rides.length} ride{rides.length !== 1 ? 's' : ''} found
             </h2>
-            {filters.date && (
-              <span className="text-muted text-sm">
-                on {new Date(filters.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}
-              </span>
+            {filters.pickupLabel && (
+              <span className="text-muted text-sm">near {filters.pickupLabel}</span>
             )}
           </div>
 
@@ -165,22 +217,35 @@ export default function SearchRides({ navigate }) {
             <div>
               <div className="empty-state">
                 <div className="empty-icon">🚗</div>
-                <div className="empty-title">No rides nearby</div>
-                <div className="empty-sub mt-8">No rides found nearby. Try a different location or date, or check back later.</div>
+                <div className="empty-title">No rides found nearby</div>
+                <div className="empty-sub mt-8">No rides available near this location. Try a different area or check back later.</div>
               </div>
-              {noMatchSuggestions && (
-                <div style={{background:'#1a1a2e', border:'1px solid #6c63ff44', borderRadius:12, padding:20, marginTop:20}}>
-                  <h4 style={{color:'#6c63ff', marginBottom:12}}>What you can do instead:</h4>
-                  {noMatchSuggestions.suggestions?.map((s, i) => (
-                    <div key={i} style={{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid #222'}}>
-                      <span style={{color:'#ccc', fontSize:14}}>{s.label}</span>
-                      <button className="btn btn-ghost btn-sm" onClick={() => navigate('route-alerts')}>
-                        {s.action === 'subscribe_alert' ? 'Subscribe' : 'Post Request'}
-                      </button>
+              <div style={{background:'var(--surface2,#1a1a2e)',border:'1px solid var(--border)',borderRadius:12,padding:20,marginTop:20}}>
+                <h4 style={{color:'var(--accent)',marginBottom:16,fontSize:15}}>💡 What you can do instead:</h4>
+                <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',background:'var(--surface3,#222)',borderRadius:8,gap:12}}>
+                    <div>
+                      <div style={{color:'var(--text)',fontSize:14,fontWeight:600}}>🔔 Get notified when a ride is posted</div>
+                      <div style={{color:'var(--text2)',fontSize:12,marginTop:3}}>Subscribe to route alerts for this area</div>
                     </div>
-                  ))}
+                    <button className="btn btn-primary btn-sm" style={{flexShrink:0}} onClick={() => navigate('route-alerts')}>Subscribe</button>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',background:'var(--surface3,#222)',borderRadius:8,gap:12}}>
+                    <div>
+                      <div style={{color:'var(--text)',fontSize:14,fontWeight:600}}>📢 Post a ride request</div>
+                      <div style={{color:'var(--text2)',fontSize:12,marginTop:3}}>Let providers see you need a ride on this route</div>
+                    </div>
+                    <button className="btn btn-outline btn-sm" style={{flexShrink:0}} onClick={() => navigate('route-alerts')}>Post Request</button>
+                  </div>
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',background:'var(--surface3,#222)',borderRadius:8,gap:12}}>
+                    <div>
+                      <div style={{color:'var(--text)',fontSize:14,fontWeight:600}}>🔍 Try a different location</div>
+                      <div style={{color:'var(--text2)',fontSize:12,marginTop:3}}>Search nearby areas or expand your pickup zone</div>
+                    </div>
+                    <button className="btn btn-outline btn-sm" style={{flexShrink:0}} onClick={() => window.scrollTo({top:0,behavior:'smooth'})}>Search Again</button>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
           ) : (
             <div className="rides-stack">
@@ -194,11 +259,9 @@ export default function SearchRides({ navigate }) {
                       onBook={bm?.status ? null : book}
                       bookingStatus={bm?.status}
                     />
-                    {bm?.error && <div className="alert alert-error mt-8">{bm.error}</div>}
+                    {bm?.error  && <div className="alert alert-error mt-8">{bm.error}</div>}
                     {bm?.status === 'pending' && (
-                      <div className="alert alert-success mt-8">
-                        Booking request sent for {bm.seats || 1} seat{(bm.seats || 1) > 1 ? 's' : ''}! Waiting for the provider to accept.
-                      </div>
+                      <div className="alert alert-success mt-8">Booking request sent! Waiting for provider to accept.</div>
                     )}
                   </div>
                 );

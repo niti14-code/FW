@@ -256,3 +256,9 @@
   opacity: 0.7;
   cursor: not-allowed;
 }
+
+.location-input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

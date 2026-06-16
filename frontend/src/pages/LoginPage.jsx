@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import './AuthPages.css';
+import * as api from '../services/api.js';
 
 export default function LoginPage({ navigate }) {
   const { loginUser } = useAuth();
@@ -29,11 +30,39 @@ export default function LoginPage({ navigate }) {
     }
   };
 
-  const handleForgot = e => {
-    e.preventDefault();
-    if (!forgotEmail) return;
+  /*const handleForgot = async (e) => {
+  e.preventDefault();
+
+  /*const response = await fetch(
+    "/api/auth/forgot-password",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email: forgotEmail
+      })
+    }
+  );
+  await api.forgotPassword(forgotEmail);
+  setForgotSent(true);
+
+  if(response.ok){
+     setForgotSent(true);
+  }
+};*/
+
+const handleForgot = async (e) => {
+  e.preventDefault();
+
+  try {
+    await api.forgotPassword(forgotEmail);
     setForgotSent(true);
-  };
+  } catch (err) {
+    alert(err.message || "Failed to send reset link");
+  }
+};
 
   // Forgot password screen
   if (showForgot) return (

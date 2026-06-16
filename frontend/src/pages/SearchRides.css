@@ -123,3 +123,52 @@
 @media (max-width: 480px) {
   .search-grid { grid-template-columns: 1fr; }
 }
+
+.loc-input-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.loc-input-row .location-search {
+  flex: 1;
+}
+
+.geo-btn {
+  min-width: 48px;
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+}
+
+.search-box {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.schedule-toggle {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sched-btn {
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.sched-btn.active {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+  font-weight: 700;
+}
+
+.geo-btn {
+  display: none !important;
+}

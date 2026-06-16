@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import Navbar from "./components/Navbar.jsx";
 import LoginPage        from "./pages/LoginPage.jsx";
@@ -18,6 +18,7 @@ import RouteAlerts      from "./pages/RouteAlerts.jsx";
 import NotificationsPage from "./pages/NotificationsPage.jsx";
 import IncidentReport   from "./pages/IncidentReport.jsx";
 import AdminSettings    from "./pages/AdminSettings.jsx";
+import ResetPassword from "./pages/ResetPassword.jsx";
 
 const PAGE_MAP = {
   login:               LoginPage,
@@ -37,13 +38,35 @@ const PAGE_MAP = {
   "notifications": NotificationsPage,
   "incident-report":   IncidentReport,
   "admin-settings":    AdminSettings,
+  "reset-password":    ResetPassword,
 };
-const PUBLIC_PAGES = ["login", "register"];
+const PUBLIC_PAGES = ["login", "register","reset-password"];
 
 function Router() {
   const { user } = useAuth();
   const [page,      setPage]      = useState(user ? "dashboard" : "login");
   const [pageProps, setPageProps] = useState({});
+
+ useEffect(() => {
+
+  const params =
+    new URLSearchParams(window.location.search);
+
+  const token =
+    params.get("resetToken");
+
+  if (token) {
+
+    setPage("reset-password");
+
+    setPageProps({
+      token
+    });
+
+  }
+
+}, []);
+
 
   const navigate = (to, props = {}) => {
     setPage(to);

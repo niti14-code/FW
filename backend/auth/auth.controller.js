@@ -200,129 +200,109 @@ if (role === 'admin' && adminKey !== 'freewheel') {
   });
 }
 */
-module.exports = { register, login, getMe };
+const crypto = require("crypto");
+const nodemailer = require("nodemailer");
 
-/*const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const User = require('../users/users.model');
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
 
-// Register user
-const register = async (req, res) => {
+exports.forgotPassword = async (req, res) => {
   try {
-    const { name, email, password, phone, role, college } = req.body;
 
-    console.log('🔍 Registration attempt:', { email, name, role });
+    const { email } = req.body;
 
-    // Check existing user
-    let existingUser = await User.findOne({
+    const user = await User.findOne({
       email: { $regex: new RegExp(`^${email}$`, 'i') }
     });
 
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found"
+      });
     }
 
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
+    const resetToken =
+      crypto.randomBytes(32).toString("hex");
 
-    // ✅ KYC LOGIC (CORRECT PLACE)
-    let kycStatus = 'not_required';
-
-    if (role === 'provider' || role === 'both') {
-      kycStatus = 'pending';
-    }
-
-    // Create user
-    const user = new User({
-      name,
-      email: email.toLowerCase(),
-      password: hashedPassword,
-      phone,
-      role,
-      college: role === 'admin' ? undefined : college,
-      kycStatus
-    });
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpire =
+      Date.now() + 15 * 60 * 1000;
 
     await user.save();
 
-    console.log('✅ User created:', user.email);
-
-    // Token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.status(201).json({
-      token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        college: user.college,
-        phone: user.phone,
-        kycStatus: user.kycStatus
-      }
+    //const resetUrl =
+      //`http://localhost:3000/reset-password/${resetToken}`;
+    const resetUrl =
+  `${process.env.FRONTEND_URL}?resetToken=${resetToken}`
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: "CampusRide- Request for Password Reset",
+      html: `
+        <h2>Password Reset</h2>
+        <p>You requested a password reset.</p>
+        <p>Click below:</p>
+        <a href="${resetUrl}">
+          Reset Password
+        </a>
+      `
     });
 
-  } catch (error) {
-    console.error('❌ Registration error:', error);
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Login user
-const login = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-    
-    // Case-insensitive login
-    const user = await User.findOne({ 
-      email: { $regex: new RegExp(`^${email}$`, 'i') } 
-    });
-    
-    if (!user) return res.status(400).json({ message: 'Invalid credentials' });
-    
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
-    
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-    
     res.json({
-      token,
-      user: { 
-        id: user._id, 
-        name: user.name,    
-        email: user.email,  
-        role: user.role,     
-        college: user.college,
-        phone: user.phone
-      }
+      message: "Reset link sent"
     });
+
   } catch (error) {
-    res.status(500).json({ message: error.message });
+
+    console.error(
+      "Forgot password error:",
+      error
+    );
+
+    res.status(500).json({
+      message: "Failed to send reset email"
+    });
+
   }
 };
 
-// Get current user
-const getMe = async (req, res) => {
-  try {
-    const user = await User.findById(req.user.userId).select('-password');
-    res.json(user);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
+exports.resetPassword = async (req, res) => {
 
+  const { token } = req.params;
+
+  const user = await User.findOne({
+    resetPasswordToken: token,
+    resetPasswordExpire: { $gt: Date.now() }
+  });
+
+  if (!user) {
+    return res.status(400).json({
+      message: "Invalid token"
+    });
+  }
+
+  user.password = await bcrypt.hash(req.body.password, 10);
+
+  user.resetPasswordToken = undefined;
+  user.resetPasswordExpire = undefined;
+
+  await user.save();
+
+  res.json({
+    message: "Password updated"
+  });
+};
 module.exports = {
   register,
   login,
-  getMe
-};*/
+  getMe,
+  forgotPassword: exports.forgotPassword,
+  resetPassword: exports.resetPassword
+};
+//module.exports = { register, login, getMe};
+
