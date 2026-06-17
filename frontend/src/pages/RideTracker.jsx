@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
+import { API_BASE } from '../services/api.js';
 
 const STATUS_CONFIG = {
   active: {
@@ -54,7 +55,15 @@ export default function RideTracker({ booking, onClose }) {
 
   useEffect(() => {
     if (!ride?._id) return;
-    const socket = io('http://localhost:5000', { transports: ['websocket', 'polling'] });
+    //const socket = io('http://localhost:5000', { transports: ['websocket', 'polling'] });
+
+  const socket = io(
+  API_BASE.replace(/\/api\/?$/, ''),
+  {
+    transports: ['websocket', 'polling'],
+    withCredentials: true
+  }
+);
     socketRef.current = socket;
     socket.on('connect', () => { socket.emit('join-ride', ride._id); });
     socket.on('passengerPickedUp', (data) => {

@@ -638,8 +638,8 @@ export const addCommunityReply = (postId, content) =>
 
   export const getNotifications = async () => {
   try {
-    const res = await fetch("/api/notifications");
-    return await res.json();
+    //const res = await fetch("/api/notifications/my");
+    const res = await fetch(`${API_BASE}/notifications/my`);    return await res.json();
   } catch (err) {
     console.error("getNotifications error:", err);
     return [];

@@ -3,6 +3,7 @@ import * as api from '../services/api.js';
 import PreRideChecklist from '../pages/PreRideChecklist.jsx';
 import io from 'socket.io-client';
 import './TripStatusFlow.css';
+import { API_BASE } from '../services/api.js';
 
 export default function TripStatusFlow({ ride, onUpdate }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -26,7 +27,14 @@ export default function TripStatusFlow({ ride, onUpdate }) {
       
       // Socket emission for cancellation
       if (label === 'cancel ride') {
-        const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
+        //const socket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
+        const socket = io(
+        API_BASE.replace(/\/api\/?$/, ''),
+        {
+        transports: ['websocket', 'polling'],
+        withCredentials: true
+       }
+      );
         socket.emit('join-ride', ride._id);
         socket.emit('provider-cancelled', {
           rideId: ride._id,

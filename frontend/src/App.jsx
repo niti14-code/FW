@@ -48,6 +48,15 @@ function Router() {
   const [pageProps, setPageProps] = useState({});
 
  useEffect(() => {
+  if (window.location.search.includes("testreset")) {
+
+  setPage("reset-password");
+
+  setPageProps({
+    token: "test-token"
+  });
+
+  }
 
   const params =
     new URLSearchParams(window.location.search);

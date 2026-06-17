@@ -64,7 +64,14 @@ export default function MyBookings({ navigate }) {
     fetchBookings().finally(() => setLoading(false));
 
     // FIXED: Setup socket connection for real-time updates
-    const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
+    //const newSocket = io(import.meta.env.VITE_API_URL || 'http://localhost:5000');
+    const newSocket = io(
+     api.API_BASE.replace(/\/api\/?$/, ''),
+    {
+      transports: ['websocket', 'polling'],
+      withCredentials: true
+    }
+    );
     setSocket(newSocket);
 
     // Join user room for personal notifications
