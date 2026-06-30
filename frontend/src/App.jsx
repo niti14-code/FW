@@ -57,23 +57,16 @@ function Router() {
   });
 
   }
+  if (
+  window.location.pathname ===
+  "/reset-password"
+) {
 
-  const params =
-    new URLSearchParams(window.location.search);
+  setPage(
+    "reset-password"
+  );
 
-  const token =
-    params.get("resetToken");
-
-  if (token) {
-
-    setPage("reset-password");
-
-    setPageProps({
-      token
-    });
-
-  }
-
+}
 }, []);
 
 

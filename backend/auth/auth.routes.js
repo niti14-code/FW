@@ -12,11 +12,9 @@ router.post('/login', controller.login);
 // GET /api/auth/me
 router.get('/me', auth, controller.getMe);
 
-router.post("/forgot-password", controller.forgotPassword);
-
 router.post(
-  "/reset-password/:token",
-  controller.resetPassword
+  "/reset-password-direct",
+  controller.resetPasswordDirect
 );
 
 module.exports = router;

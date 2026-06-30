@@ -647,11 +647,16 @@ export const addCommunityReply = (postId, content) =>
 };
 
 //Forgot password
-export const forgotPassword = (email) =>
-  request('/auth/forgot-password', {
-    method: 'POST',
-    body: JSON.stringify({ email })
-  });
+export const forgotPassword = async (email) => {
+  localStorage.setItem(
+    "resetEmail",
+    email
+  );
+
+  return {
+    success: true
+  };
+};
 
 //Reset password
 export const resetPassword = async (

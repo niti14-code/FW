@@ -90,15 +90,26 @@ export default function SearchRides({ navigate }) {
     }
   }, [filters, scheduleMode]);
 
-  const book = async (rideId) => {
-    setBookingMap(m => ({ ...m, [rideId]: { loading: true } }));
+  const book = async (rideId, seats) => {
+    setBookingMap(m => ({
+        ...m,
+        [rideId]: { loading: true }
+    }));
+
     try {
-      await api.requestBooking(rideId);
-      setBookingMap(m => ({ ...m, [rideId]: { status: 'pending' } }));
+        await api.requestBooking(rideId, seats);
+
+        setBookingMap(m => ({
+            ...m,
+            [rideId]: { status: "pending" }
+        }));
     } catch (err) {
-      setBookingMap(m => ({ ...m, [rideId]: { error: err.message } }));
+        setBookingMap(m => ({
+            ...m,
+            [rideId]: { error: err.message }
+        }));
     }
-  };
+};
 
   const today = new Date().toISOString().split('T')[0];
   const nowTime = new Date().toTimeString().slice(0,5);

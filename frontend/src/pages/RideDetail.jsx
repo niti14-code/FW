@@ -43,7 +43,7 @@ export default function RideDetail({ navigate, rideId }) {
   const handleBook = async () => {
     setBooking({ loading:true, status:null, error:'' });
     try {
-      await api.requestBooking(rideId);
+      await api.requestBooking(rideId, selectedSeats);
       setBooking({ loading:false, status:'pending', error:'' });
     } catch (e) {
       setBooking({ loading:false, status:null, error: e.message });

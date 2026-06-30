@@ -2,7 +2,7 @@ const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
 const User   = require('../users/users.model');
 const { validateCollegeEmail } = require('../config/collegeDomains');
-
+const axios = require("axios");
 // ── Register ──────────────────────────────────────────────────────
 const register = async (req, res) => {
   try {
@@ -200,11 +200,6 @@ if (role === 'admin' && adminKey !== 'freewheel') {
   });
 }
 */
-const crypto = require("crypto");
-const { Resend } = require("resend");
-const resend = new Resend(
-  process.env.RESEND_API_KEY
-);
 /*const nodemailer = require("nodemailer");
 
 const transporter = nodemailer.createTransport({
@@ -220,49 +215,6 @@ const transporter = nodemailer.createTransport({
   }
 });
 */
-exports.forgotPassword = async (req, res) => {
-  try {
-
-    const { email } = req.body;
-
-    const user = await User.findOne({
-      email: { $regex: new RegExp(`^${email}$`, 'i') }
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found"
-      });
-    }
-
-    const resetToken =
-      crypto.randomBytes(32).toString("hex");
-
-    user.resetPasswordToken = resetToken;
-    user.resetPasswordExpire =
-      Date.now() + 15 * 60 * 1000;
-
-    await user.save();
-
-    //const resetUrl =
-      //`http://localhost:3000/reset-password/${resetToken}`;
-    const resetUrl =
-  `${process.env.FRONTEND_URL}?resetToken=${resetToken}`
-    // Send reset email using Resend
-    await resend.emails.send({
-  from: "CampusRide <onboarding@resend.dev>",
-  to: email,
-  subject: "CampusRide - Request for Password Reset",
-  html: `
-    <h2>Password Reset</h2>
-    <p>You requested a password reset.</p>
-    <p>Click below:</p>
-
-    <a href="${resetUrl}">
-      Reset Password
-    </a>
-  `
-});
     /*await transporter.sendMail({
       from: process.env.EMAIL_USER,
       to: email,
@@ -277,56 +229,50 @@ exports.forgotPassword = async (req, res) => {
       `
     });*/
 
+  exports.resetPasswordDirect = async (req, res) => {
+  try {
+
+    const {
+      email,
+      password
+    } = req.body;
+
+    const user = await User.findOne({
+      email: { $regex: new RegExp(`^${email}$`, 'i') }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+
+    user.password =
+      await bcrypt.hash(password, salt);
+
+    await user.save();
+
     res.json({
-      message: "Reset link sent"
+      message:
+        "Password updated successfully"
     });
 
   } catch (error) {
 
-    console.error(
-      "Forgot password error:",
-      error
-    );
-
     res.status(500).json({
-      message: "Failed to send reset email"
+      message: error.message
     });
 
   }
-};
-
-exports.resetPassword = async (req, res) => {
-
-  const { token } = req.params;
-
-  const user = await User.findOne({
-    resetPasswordToken: token,
-    resetPasswordExpire: { $gt: Date.now() }
-  });
-
-  if (!user) {
-    return res.status(400).json({
-      message: "Invalid token"
-    });
-  }
-
-  user.password = await bcrypt.hash(req.body.password, 10);
-
-  user.resetPasswordToken = undefined;
-  user.resetPasswordExpire = undefined;
-
-  await user.save();
-
-  res.json({
-    message: "Password updated"
-  });
 };
 module.exports = {
   register,
   login,
   getMe,
-  forgotPassword: exports.forgotPassword,
-  resetPassword: exports.resetPassword
+  resetPasswordDirect:
+    exports.resetPasswordDirect
 };
 //module.exports = { register, login, getMe};
 

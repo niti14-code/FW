@@ -71,84 +71,56 @@ export default function LocationSearch({
 
   // ── GPS detect ────────────────────────────────────────────────
   const handleGeolocation = () => {
-    if (!navigator.geolocation) { alert('Geolocation not supported'); return; }
-    setGeoLoading(true);
-    setQuery('Detecting your location…');
-
-    navigator.geolocation.getCurrentPosition(
-
-  async (position) => {
-
-    try {
-
-      const lat = position.coords.latitude;
-      const lng = position.coords.longitude;
-
-      // Show temporary loading text
-      setQuery('Detecting location...');
-
-      // Reverse geocode from backend
-      const location =
-        await api.reverseGeocode(lat, lng);
-
-      console.log(
-        'Reverse geocode response:',
-        location
-      );
-
-      // Get readable address
-      const address =
-        location?.display_name?.trim();
-
-      // Final address fallback
-      const finalAddress =
-        address &&
-        address !== 'Unknown Location'
-          ? address
-          : `Lat ${lat.toFixed(4)}, Lng ${lng.toFixed(4)}`;
-
-      // Update input
-      setQuery(finalAddress);
-
-      // Send to parent
-      onChange?.(
-        finalAddress,
-        lat,
-        lng
-      );
-
-      onLocationSelect?.({
-        display_name: finalAddress,
-        lat,
-        lng
-      });
-
-    } catch (err) {
-
-      console.error(err);
-
-      setQuery('Unable to detect location');
-
-    }
-
-  },
-
-  (err) => {
-
-    console.error(err);
-
-    setQuery('Location permission denied');
-
-  },
-
-  {
-    enableHighAccuracy: true,
-    timeout: 10000,
-    maximumAge: 0
+  if (!navigator.geolocation) {
+    alert('Geolocation not supported');
+    return;
   }
 
-);
-  };
+  let isMounted = true; // unmount guard
+  setGeoLoading(true);
+  setQuery('Detecting your location…');
+
+  navigator.geolocation.getCurrentPosition(
+    async (position) => {
+      if (!isMounted) return;
+      try {
+        const { latitude: lat, longitude: lng } = position.coords;
+        const location = await api.reverseGeocode(lat, lng);
+        if (!isMounted) return;
+
+        const address = location?.display_name?.trim();
+        const finalAddress =
+          address && address !== 'Unknown Location'
+            ? address
+            : `${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+
+        setQuery(finalAddress);
+        onChange?.(finalAddress, lat, lng);
+        onLocationSelect?.({ display_name: finalAddress, lat, lng });
+      } catch (err) {
+        if (!isMounted) return;
+        console.error('Reverse geocode failed:', err);
+        setQuery('Unable to detect location');
+      } finally {
+        if (isMounted) setGeoLoading(false); // ✅ Always stops spinner on success or error
+      }
+    },
+    (err) => {
+      if (!isMounted) return;
+      const messages = {
+        1: 'Location permission denied. Please allow location access.',
+        2: 'Location unavailable. Try searching manually.',
+        3: 'Location request timed out. Try again.',
+      };
+      setQuery(messages[err.code] || 'Could not detect location');
+      setGeoLoading(false); // ✅ Always stops spinner on geolocation error
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+
+  // cleanup for unmount
+  return () => { isMounted = false; };
+};
 
   // ── Close on outside click ────────────────────────────────────
   useEffect(() => {

@@ -56,12 +56,17 @@ export default function LoginPage({ navigate }) {
 const handleForgot = async (e) => {
   e.preventDefault();
 
-  try {
-    await api.forgotPassword(forgotEmail);
-    setForgotSent(true);
-  } catch (err) {
-    alert(err.message || "Failed to send reset link");
+  if (!forgotEmail) {
+    alert("Please enter your email");
+    return;
   }
+
+  localStorage.setItem(
+    "resetEmail",
+    forgotEmail
+  );
+
+  navigate("reset-password");
 };
 
   // Forgot password screen
@@ -92,7 +97,7 @@ const handleForgot = async (e) => {
                 </div>
               </div>
               <button type="submit" className="btn btn-primary btn-lg btn-full mt-8">
-                Send Reset Link →
+                Continue →
               </button>
             </>
           )}
