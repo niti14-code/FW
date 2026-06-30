@@ -686,6 +686,30 @@ export const resetPassword = async (
   return data;
 };
 
+export const resetPasswordDirect = async (email, password) => {
+
+  const response = await fetch(
+    `${API_BASE}/api/auth/reset-password-direct`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.message);
+  }
+
+  return data;
+};
 //Ratings page
 export const getRideRatings = (rideId) => request(`/ratings/ride/${rideId}`);
 export const getUserRatings = (userId) => request(`/ratings/${userId}`);

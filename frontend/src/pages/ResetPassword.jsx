@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import "./ResetPassword.css";
+import { resetPasswordDirect } from "../services/api";
 
 export default function ResetPassword({ navigate }) {
   const [email] = useState(
@@ -35,7 +36,7 @@ export default function ResetPassword({ navigate }) {
 
       //const response = await fetch(
        // "http://localhost:5000/api/auth/reset-password-direct",
-       const response = await fetch(
+       /*const response = await fetch(
   `${import.meta.env.VITE_API_URL}/api/auth/reset-password-direct`,
    {
           method: "POST",
@@ -47,7 +48,8 @@ export default function ResetPassword({ navigate }) {
             password,
           }),
         }
-      );
+      );*/
+      await resetPasswordDirect(email, password);
 
       const data = await response.json();
 

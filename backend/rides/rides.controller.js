@@ -160,18 +160,15 @@ exports.searchRides = async (req, res) => {
     // Build base query - only active rides with available seats
     const query = { 
       status: 'active',
-      seatsAvailable: { $gt: 0 }  // Only rides with seats available
+      seatsAvailable: { $gt: 0 }
     };
-
-    const now = new Date();
-    const currentHour = now.getHours();
 
     // Add specific date filter if provided
     if (date) {
       const searchDate = new Date(date);
       const nextDay = new Date(searchDate);
       nextDay.setDate(nextDay.getDate() + 1);
-      nextDay.setHours(0, 0, 0, 0); // Set to start of next day
+      nextDay.setHours(0, 0, 0, 0);
       
       query.date = {
         $gte: searchDate,
@@ -179,21 +176,36 @@ exports.searchRides = async (req, res) => {
       };
       console.log('Date filter:', searchDate, 'to', nextDay);
     } else {
-      // No date provided - show future rides only
-      // If it's after 10 AM, show rides from current time onwards
-      // If it's before 10 AM, show rides from 10 AM onwards
-      const today = new Date();
-      if (currentHour >= 10) {
-        // After 10 AM - show rides from current time onwards
-        query.date = { $gte: today };
-        console.log('After 10 AM - showing rides from now:', today);
-      } else {
-        // Before 10 AM - show rides from 10 AM onwards
-        today.setHours(10, 0, 0, 0); // Set to 10 AM today
-        query.date = { $gte: today };
-        console.log('Before 10 AM - showing rides from 10 AM:', today);
-      }
+      // No date provided ("Ride Now") - show rides from start of today and future
+      // Rides past their scheduled time are filtered in JS below (date+time combined check)
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+      query.date = { $gte: startOfToday };
+      console.log('Ride Now - showing rides from start of today:', startOfToday);
     }
+
+    // Helper: check if a ride's scheduled date+time is still in the future
+    // The `time` field is stored as "HH:MM" string; `date` is stored as midnight UTC
+    const now = new Date();
+    const isRideUpcoming = (ride) => {
+      if (!ride.time) return true; // no time set, don't filter out
+      const [hours, minutes] = ride.time.split(':').map(Number);
+      if (isNaN(hours) || isNaN(minutes)) return true;
+
+      // Reconstruct the ride's full scheduled datetime using the date's
+      // year/month/day in local time, combined with the stored HH:MM time
+      const rideDate = new Date(ride.date);
+      const scheduled = new Date(
+        rideDate.getFullYear(),
+        rideDate.getMonth(),
+        rideDate.getDate(),
+        hours,
+        minutes,
+        0,
+        0
+      );
+      return scheduled > now;
+    };
 
     // If coordinates provided, use geo-proximity search
     let rides = [];
@@ -205,7 +217,6 @@ exports.searchRides = async (req, res) => {
       
       console.log('Geo search:', { latitude, longitude, distanceInMeters });
 
-      // FIXED: Find rides where pickup is within maxDistance
       rides = await Ride.find({
         ...query,
         pickup: {
@@ -219,9 +230,13 @@ exports.searchRides = async (req, res) => {
         }
       }).populate('providerId', 'name rating');
       
-      console.log(`Found ${rides.length} rides within ${distanceInMeters}m`);
+      console.log(`Found ${rides.length} rides within ${distanceInMeters}m (before time filter)`);
 
-      // FIXED: If drop location provided, filter by drop distance too
+      // Filter out rides whose scheduled time has already passed
+      rides = rides.filter(isRideUpcoming);
+      console.log(`Found ${rides.length} rides after past-time filter`);
+
+      // If drop location provided, also filter by drop distance
       if (dropLat && dropLng && !isNaN(parseFloat(dropLat)) && !isNaN(parseFloat(dropLng))) {
         const dropLatitude = parseFloat(dropLat);
         const dropLongitude = parseFloat(dropLng);
@@ -229,8 +244,7 @@ exports.searchRides = async (req, res) => {
         rides = rides.filter(ride => {
           if (!ride.drop?.coordinates || ride.drop.coordinates.length !== 2) return false;
           
-          // Calculate distance using Haversine formula
-          const R = 6371e3; // Earth's radius in meters
+          const R = 6371e3;
           const φ1 = dropLatitude * Math.PI / 180;
           const φ2 = ride.drop.coordinates[1] * Math.PI / 180;
           const Δφ = (ride.drop.coordinates[1] - dropLatitude) * Math.PI / 180;
@@ -248,12 +262,14 @@ exports.searchRides = async (req, res) => {
         console.log(`After drop filter: ${rides.length} rides`);
       }
     } else {
-      // No coordinates - return all rides matching date filter (if any)
+      // No coordinates - return all rides matching date filter
       rides = await Ride.find(query)
         .populate('providerId', 'name rating')
         .sort({ date: 1, time: 1 });
-      
-      console.log(`Found ${rides.length} rides (no geo filter)`);
+
+      // Filter out rides whose scheduled time has already passed
+      rides = rides.filter(isRideUpcoming);
+      console.log(`Found ${rides.length} rides (no geo filter, after time filter)`);
     }
 
     res.json(rides);

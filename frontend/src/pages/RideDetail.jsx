@@ -24,10 +24,11 @@ function useLocationName(locationField) {
 
 export default function RideDetail({ navigate, rideId }) {
   const { user } = useAuth();
-  const [ride,    setRide]    = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState('');
-  const [booking, setBooking] = useState({ loading:false, status:null, error:'' });
+  const [ride,          setRide]         = useState(null);
+  const [loading,       setLoading]      = useState(true);
+  const [error,         setError]        = useState('');
+  const [booking,       setBooking]      = useState({ loading:false, status:null, error:'' });
+  const [selectedSeats, setSelectedSeats] = useState(1);
 
   const pickupName = useLocationName(ride?.pickup);
   const dropName   = useLocationName(ride?.drop);
@@ -148,11 +149,29 @@ export default function RideDetail({ navigate, rideId }) {
 
           <div className="flex gap-12 flex-wrap">
             {isSeeker && !isOwner && !booking.status && ride.seatsAvailable > 0 && (
-              <button
-                className={`btn btn-primary btn-lg ${booking.loading ? 'btn-loading' : ''}`}
-                onClick={handleBook} disabled={booking.loading}>
-                {!booking.loading && '🎫 Book This Seat'}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                {ride.seatsAvailable > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: 'var(--text-muted, #999)' }}>Seats:</span>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ width: 32, padding: 0 }}
+                      onClick={() => setSelectedSeats(s => Math.max(1, s - 1))}
+                      disabled={selectedSeats <= 1}>−</button>
+                    <span style={{ fontWeight: 700, minWidth: 20, textAlign: 'center' }}>{selectedSeats}</span>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ width: 32, padding: 0 }}
+                      onClick={() => setSelectedSeats(s => Math.min(ride.seatsAvailable, s + 1))}
+                      disabled={selectedSeats >= ride.seatsAvailable}>+</button>
+                  </div>
+                )}
+                <button
+                  className={`btn btn-primary btn-lg ${booking.loading ? 'btn-loading' : ''}`}
+                  onClick={handleBook} disabled={booking.loading}>
+                  {!booking.loading && `🎫 Book ${selectedSeats} Seat${selectedSeats > 1 ? 's' : ''}`}
+                </button>
+              </div>
             )}
             {ride.seatsAvailable === 0 && !booking.status && (
               <span className="badge badge-rejected" style={{fontSize:13, padding:'8px 14px'}}>No seats available</span>

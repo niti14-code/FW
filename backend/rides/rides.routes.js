@@ -12,14 +12,13 @@ router.post('/create', controller.createRide);
 router.get('/search', controller.searchRides);
 router.get('/my', controller.getMyRides);
 router.get('/no-match-suggest', controller.noMatchSuggest);
+router.get('/nearby-suggestions', controller.findNearbyRides);
 router.get('/recurring/:rideId/instances', controller.getRecurringInstances);
 
 // ── Dynamic /:id routes ───────────────────────────────────────────
 router.get('/:id', controller.getRide);
 router.put('/:id', controller.updateRide);
 router.delete('/:id', controller.deleteRide);
-// Add this with other routes
-router.get('/nearby-suggestions', controller.findNearbyRides);
 
 // Trip status flow
 router.post('/:rideId/checklist', controller.submitChecklist);
